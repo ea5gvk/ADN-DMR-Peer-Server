@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #
 ###############################################################################
+# Copyright (C) 2025 Bruno Farias, CS8ABG <cs8abg@gmail.com> 
 # Copyright (C) 2020 Simon Adlem, G7RZU <g7rzu@gb7fr.org.uk>  
 # Copyright (C) 2016-2019 Cortney T. Buffington, N0MJS <n0mjs@me.com>
 #
@@ -57,9 +58,6 @@ from spyne.server.twisted import TwistedWebResource
 from spyne.protocol.http import HttpRpc
 from spyne.protocol.json import JsonDocument
 
-
-
-
 # Things we import from the main hblink module
 from hblink import HBSYSTEM, OPENBRIDGE, systems, hblink_handler, reportFactory, REPORT_OPCODES, mk_aliases, acl_check
 from dmr_utils3.utils import bytes_3, int_id, get_alias, bytes_4
@@ -114,9 +112,7 @@ def header(slot,call_type,bits):
         bits = 0b00000011 | bits
     
     return bits
-    
-        
-
+ 
 # Timed loop used for reporting HBP status
 #
 # REPORT BASED ON THE TYPE SELECTED IN THE MAIN CONFIG FILE
@@ -147,7 +143,6 @@ def config_reports(_config, _factory):
 # Start API server
 def config_API(_config, _bridges):
 
-
     application = Application([FD_API],
         tns='adn.api',
         in_protocol=HttpRpc(validator='soft'),
@@ -164,7 +159,6 @@ def config_API(_config, _bridges):
 
     r = reactor.listenTCP(8000, site, interface='0.0.0.0')
     return(r)
-
 
 # Import Bridging rules
 # Note: A stanza *must* exist for any MASTER or CLIENT configured in the main
@@ -254,7 +248,6 @@ def make_stat_bridge(_tgid):
                     
         if _system[0:3] == 'OBP':
             BRIDGES[_tgid_s].append({'SYSTEM': _system, 'TS': 1, 'TGID': _tgid,'ACTIVE': True,'TIMEOUT': '','TO_TYPE': 'STAT','OFF': [],'ON': [],'RESET': [], 'TIMER': time()})
-        
 
 def make_default_reflector(reflector,_tmout,system):
     bridge = ''.join(['#',str(reflector)])
@@ -298,26 +291,6 @@ def reset_static_tg(tg,ts,_tmout,system):
     except KeyError:
         logger.exception('(%s) KeyError in reset_static_tg() - bridge gone away? TG: %s',system,tg)
         return
-        
-# def reset_default_reflector(reflector,_tmout,system):
-#     print(reflector)
-#     bridge = ''.join(['#',str(reflector)])
-#     print(bridge)
-#     #_tmout = CONFIG['SYSTEMS'][system]['DEFAULT_UA_TIMER']
-#     if bridge not in BRIDGES:
-#         BRIDGES[bridge] = []
-#         make_single_reflector(bytes_3(reflector),_tmout, system)
-#     bridgetemp = deque()
-#     for bridgesystem in BRIDGES[bridge]:
-#         print(bridgesystem)
-#         if bridgesystem['SYSTEM'] == system and bridgesystem['TS'] == 2:
-#             print(bridgesystem)
-#             bridgetemp.append({'SYSTEM': system, 'TS': 2, 'TGID': bytes_3(9),'ACTIVE': False,'TIMEOUT':  _tmout * 60,'TO_TYPE': 'ON','OFF': [],'ON': [bytes_3(reflector),],'RESET': [], 'TIMER': time() + (_tmout * 60)})
-#         else:
-#             bridgetemp.append(bridgesystem)
-#         print(bridgetemp)
-#         BRIDGES[bridge] = bridgetemp
-#         print(BRIDGES[bridge])
 
 def reset_all_reflector_system(_tmout,system):
     for system in CONFIG['SYSTEMS']:
@@ -330,7 +303,6 @@ def reset_all_reflector_system(_tmout,system):
                     else:
                         bridgetemp.append(bridgesystem)
                     BRIDGES[bridge] = bridgetemp
-
             
 def make_single_reflector(_tgid,_tmout,_sourcesystem):
     _tgid_s = str(int_id(_tgid))
@@ -365,7 +337,6 @@ def remove_bridge_system(system):
                 _bridgestemp[_bridge].append({'SYSTEM': system, 'TS': _bridgesystem['TS'], 'TGID': _bridgesystem['TGID'],'ACTIVE': False,'TIMEOUT':  _bridgesystem['TIMEOUT'],'TO_TYPE': 'ON','OFF': [],'ON': [_bridgesystem['TGID'],],'RESET': [], 'TIMER': time() + _bridgesystem['TIMEOUT']})
             
     BRIDGES.update(_bridgestemp)
-                
 
 # Run this every minute for rule timer updates
 def rule_timer_loop():
@@ -497,9 +468,7 @@ def bridgeDebug():
                             bridgetemp.append(bridgesystem)
                         BRIDGES[_bridge] = bridgetemp
 
-
     logger.info('(BRIDGEDEBUG) The server currently has %s STATic bridges',statroll)
-
 
 def kaReporting():
     logger.debug('(ROUTER) KeepAlive reporting loop started')
@@ -520,7 +489,6 @@ def subMapWrite():
         logger.info('(SUBSCRIBER) Writing SUB_MAP to disk')
     except:
         logger.warning('(SUBSCRIBER) Cannot write SUB_MAP to file')
-        
 
 #Subscriber Map trimmer loop
 def SubMapTrimmer():
@@ -535,7 +503,6 @@ def SubMapTrimmer():
         SUB_MAP.pop(_remove)
     if CONFIG['ALIASES']['SUB_MAP_FILE']:
         subMapWrite()
-
 
 # run this every 10 seconds to trim stream ids
 def stream_trimmer_loop():
@@ -616,7 +583,6 @@ def stream_trimmer_loop():
                     logger.exception("(%s) Keyerror - stream trimmer Stream ID: %s",system,stream_id, exc_info=e)
                     systems[system].STATUS[stream_id]['LAST'] = _now
                     continue
-
                     
                 try:
                     if systems[system].STATUS[stream_id]['LAST'] < _now - 180:
@@ -749,9 +715,7 @@ def playFileOnRequest(self,fileNumber):
         _stream_id = pkt[16:20]
         _pkt_time = time()
         reactor.callFromThread(sendVoicePacket,self,pkt,_source_id,_nine,_slot)
-    logger.debug('(%s) Sending AMBE file %s end',system,fileNumber)
-
-    
+    logger.debug('(%s) Sending AMBE file %s end',system,fileNumber)    
 
 def threadIdent():
     logger.debug('(IDENT) starting ident thread')
@@ -823,9 +787,6 @@ def ident():
                 
                 _say.append(words[_lang]['adn'])
                 
-                #test 
-                #_say.append(AMBEobj.readSingleFile('alpha.ambe'))
-
                 _peer_id = CONFIG['GLOBAL']['SERVER_ID']
                 speech = pkt_gen(_source_id, _dst_id, _peer_id, 1, _say)
 
@@ -861,7 +822,6 @@ def options_config():
 
     prohibitedTGs = [0,1,2,3,4,5,9,9990,9991,9992,9993,9994,9995,9996,9997,9998,9999]
 
-
     for _system in CONFIG['SYSTEMS']:
         try:
             if CONFIG['SYSTEMS'][_system]['MODE'] != 'MASTER':
@@ -895,8 +855,6 @@ def options_config():
                     else:
                         logger.debug('(OPTIONS) %s, _opt_key not set and no key sent. Set to false',_system)
                         CONFIG['SYSTEMS'][_system]['_opt_key'] = False
-
-                    
                     if 'DIAL' in _options:
                         _options['DEFAULT_REFLECTOR'] = _options.pop('DIAL')
                     if 'TIMER' in _options:
@@ -956,69 +914,51 @@ def options_config():
 
                     if 'UserLink' in _options:
                         _options.pop('UserLink')
-                    
                     if 'TS1_STATIC' not in _options:
                         _options['TS1_STATIC'] = False
-                    
                     if 'TS2_STATIC' not in _options:
                         _options['TS2_STATIC'] = False
-                        
                     if 'DEFAULT_REFLECTOR' not in _options:
                         _options['DEFAULT_REFLECTOR'] = 0
-                    
                     if 'OVERRIDE_IDENT_TG' not in _options:
                         _options['OVERRIDE_IDENT_TG'] = False
-                        
                     if 'DEFAULT_UA_TIMER' not in _options:
                         _options['DEFAULT_UA_TIMER'] = CONFIG['SYSTEMS'][_system]['DEFAULT_UA_TIMER']
-                    
                     if 'VOICE' in _options and bool(_options['VOICE']) and (CONFIG['SYSTEMS'][_system]['VOICE_IDENT'] != bool(int(_options['VOICE']))):
                         CONFIG['SYSTEMS'][_system]['VOICE_IDENT'] = bool(int(_options['VOICE']))
                         logger.debug("(OPTIONS) %s - Setting voice ident to %s",_system,CONFIG['SYSTEMS'][_system]['VOICE_IDENT'])
-                        
                     if 'OVERRIDE_IDENT_TG' in _options and _options['OVERRIDE_IDENT_TG'] and (CONFIG['SYSTEMS'][_system]['OVERRIDE_IDENT_TG'] != int(_options['OVERRIDE_IDENT_TG'])):
                         CONFIG['SYSTEMS'][_system]['OVERRIDE_IDENT_TG'] = int(_options['OVERRIDE_IDENT_TG'])
                         logger.debug("(OPTIONS) %s - Setting OVERRIDE_IDENT_TG to %s",_system,CONFIG['SYSTEMS'][_system]['OVERRIDE_IDENT_TG'])
-                        
                     if 'LANG' in _options and _options['LANG'] in words and _options['LANG'] != CONFIG['SYSTEMS'][_system]['ANNOUNCEMENT_LANGUAGE'] :
                         CONFIG['SYSTEMS'][_system]['ANNOUNCEMENT_LANGUAGE'] = _options['LANG']
                         logger.debug("(OPTIONS) %s - Setting voice language to  %s",_system,CONFIG['SYSTEMS'][_system]['ANNOUNCEMENT_LANGUAGE'])
-                        
-                        
                     if 'SINGLE' in _options and (CONFIG['SYSTEMS'][_system]['SINGLE_MODE'] != bool(int(_options['SINGLE']))):
                         CONFIG['SYSTEMS'][_system]['SINGLE_MODE'] = bool(int(_options['SINGLE']))
                         logger.debug("(OPTIONS) %s - Setting SINGLE_MODE to %s",_system,CONFIG['SYSTEMS'][_system]['SINGLE_MODE'])
-                    
                     if 'TS1_STATIC' not in _options or 'TS2_STATIC' not in _options or 'DEFAULT_REFLECTOR' not in _options or 'DEFAULT_UA_TIMER' not in _options:
                         logger.debug('(OPTIONS) %s - Required field missing, ignoring',_system)
                         continue
-                    
                     if _options['TS1_STATIC'] == '':
                         _options['TS1_STATIC'] = False
                     if _options['TS2_STATIC'] == '':
                         _options['TS2_STATIC'] = False
-                        
                     if _options['TS1_STATIC']:
                         re.sub("\s","",_options['TS1_STATIC'])
                         if re.search("![\d\,]",_options['TS1_STATIC']):
                             logger.debug('(OPTIONS) %s - TS1_STATIC contains characters other than numbers and comma, ignoring',_system)
                             continue
-                    
                     if _options['TS2_STATIC']:
                         re.sub("\s","",_options['TS2_STATIC'])
                         if re.search("![\d\,]",_options['TS2_STATIC']):
                             logger.debug('(OPTIONS) %s - TS2_STATIC contains characters other than numbers and comma, ignoring',_system)
                             continue
-                    
                     if isinstance(_options['DEFAULT_REFLECTOR'], str) and not _options['DEFAULT_REFLECTOR'].isdigit():
                         logger.debug('(OPTIONS) %s - DEFAULT_REFLECTOR is not an integer, ignoring',_system)
                         continue
-                    
                     if isinstance(_options['OVERRIDE_IDENT_TG'], str) and not _options['OVERRIDE_IDENT_TG'].isdigit():
                         logger.debug('(OPTIONS) %s - OVERRIDE_IDENT_TG is not an integer, ignoring',_system)
                         continue
-                    
-                    
                     if isinstance(_options['DEFAULT_UA_TIMER'], str) and not _options['DEFAULT_UA_TIMER'].isdigit():
                         logger.debug('(OPTIONS) %s - DEFAULT_UA_TIMER is not an integer, ignoring',_system)
                         continue
@@ -1028,9 +968,7 @@ def options_config():
                     #For all practical purposes, this implements an unlimited timer - aka sticky static.
                     if int(_options['DEFAULT_UA_TIMER']) == 0:
                         _options['DEFAULT_UA_TIMER'] = 35791394
-                        
                     _tmout = int(_options['DEFAULT_UA_TIMER'])
-                    
                     if int(_options['DEFAULT_UA_TIMER']) != CONFIG['SYSTEMS'][_system]['DEFAULT_UA_TIMER']:
                         logger.debug('(OPTIONS) %s Updating DEFAULT_UA_TIMER for existing bridges.',_system)
                         remove_bridge_system(_system)
@@ -1104,7 +1042,6 @@ def options_config():
                                 elif int(tg) in prohibitedTGs:
                                     logger.debug('(OPTIONS) %s TS2 TG %s is prohibited, ignoring change',_system,tg)
                                     continue
-
                                 tg = int(tg)
                                 make_static_tg(tg,2,_tmout,_system)
                     
@@ -1133,7 +1070,6 @@ class routerOBP(OPENBRIDGE):
             return peer_ids[_int_peer_id]
         else:
             return _int_peer_id
-
                 
     def to_target(self, _peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits,_bridge,_system,_noOBP,sysIgnore, _hops = b'', _source_server = b'\x00\x00\x00\x00', _ber = b'\x00', _rssi = b'\x00', _source_rptr = b'\x00\x00\x00\x00'):
         _sysIgnore = sysIgnore
@@ -1168,7 +1104,6 @@ class routerOBP(OPENBRIDGE):
                         if not acl_check(_target['TGID'],_target_system['TG1_ACL']):
                             #logger.info('(%s) TGID prohibited by ACL, not sending', _target['SYSTEM'])
                             continue
-                        
                     
                     # Is this a new call stream on the target?
                     if (_stream_id not in _target_status):
@@ -1179,7 +1114,6 @@ class routerOBP(OPENBRIDGE):
                             'RFS':       _rf_src,
                             'TGID':      _dst_id,
                             'RX_PEER': _peer_id,
-
                         }
                         # Generate LCs (full and EMB) for the TX stream
                         try:
@@ -1328,7 +1262,6 @@ class routerOBP(OPENBRIDGE):
         _int_dst_id = int_id(_dst_id)
         _target_status = systems[_target].STATUS
         _target_system = self._CONFIG['SYSTEMS'][_target]
-
         
         #If target has missed 6 (on 1 min) of keepalives, don't send
         if _target_system['ENHANCED_OBP'] and '_bcka' in _target_system and _target_system['_bcka'] < pkt_time - 60:
@@ -1362,28 +1295,20 @@ class routerOBP(OPENBRIDGE):
         if CONFIG['REPORTS']['REPORT']:
             systems[_target]._report.send_bridgeEvent('UNIT DATA,DATA,TX,{},{},{},{},{},{}'.format(_target, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), 1, _int_dst_id).encode(encoding='utf-8', errors='ignore'))
 
-
     def dmrd_received(self, _peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data,_hash, _hops = b'', _source_server = b'\x00\x00\x00\x00', _ber = b'\x00', _rssi = b'\x00', _source_rptr = b'\x00\x00\x00\x00'):
         
         pkt_time = time()
         dmrpkt = _data[20:53]
         _bits = _data[15]
-
-        #pkt_crc = Crc32.calc(_data[4:53])
-        #_pkt_crc = Crc32.calc(dmrpkt)
-        
-        #Use blake2b hash
         _h = blake2b(digest_size=16)
         _h.update(_data)
         _pkt_crc = _h.digest()
-        
-        #_pkt_crc = _hash
 
         # Match UNIT data, SMS/GPS, and send it to the dst_id if it is in SUB_MAP
         if _call_type == 'unit' and (_dtype_vseq == 6 or _dtype_vseq == 7 or _dtype_vseq == 8 or ((_stream_id not in self.STATUS) and _dtype_vseq == 3)):
         
             _int_dst_id = int_id(_dst_id)
-##        if ahex(dmrpkt)[27:-27] == b'd5d7f77fd757':
+        ##if ahex(dmrpkt)[27:-27] == b'd5d7f77fd757':
             # This is a data call
             _data_call = True
             
@@ -1402,7 +1327,6 @@ class routerOBP(OPENBRIDGE):
                     'RX_PEER': _peer_id,
                     'packets': 0,
                     'crcs': set()
-
                 }
             
             self.STATUS[_stream_id]['LAST'] = pkt_time
@@ -1444,8 +1368,6 @@ class routerOBP(OPENBRIDGE):
                 self.STATUS[_stream_id]['LAST'] = pkt_time
                 return
             
-
-            
             if _dtype_vseq == 3:
                 logger.info('(%s) *UNIT CSBK* STREAM ID: %s, RPTR: %s SUB: %s (%s) PEER: %s (%s) DST_ID %s (%s), TS %s, SRC: %s, RPTR: %s', \
                         self._system, int_id(_stream_id), self.get_rptr(_source_rptr), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot, int_id(_source_server),int_id(_source_rptr))
@@ -1474,7 +1396,6 @@ class routerOBP(OPENBRIDGE):
             if CONFIG['GLOBAL']['DATA_GATEWAY'] and 'DATA-GATEWAY' in CONFIG['SYSTEMS'] and CONFIG['SYSTEMS']['DATA-GATEWAY']['MODE'] == 'OPENBRIDGE' and CONFIG['SYSTEMS']['DATA-GATEWAY']['ENABLED']:
                 logger.debug('(%s) DATA packet sent to DATA-GATEWAY',self._system)
                 self.sendDataToOBP('DATA-GATEWAY',_data,dmrpkt,pkt_time,_stream_id,_dst_id,_peer_id,_rf_src,_bits,_slot,_source_rptr,_ber,_rssi)
-                
             
             #Send other openbridges
             for system in systems:
@@ -1530,7 +1451,6 @@ class routerOBP(OPENBRIDGE):
                                     logger.debug('(%s) UNIT Data not bridged to HBP on slot %s - target busy: %s DST_ID: %s',self._system,_d_slot,_d_system,_int_dst_id)
             
             self.STATUS[_stream_id]['crcs'].add(_pkt_crc)
-            
                     
         if _call_type == 'group' or _call_type == 'vcsbk':
             # Is this a new call stream?
@@ -1549,7 +1469,6 @@ class routerOBP(OPENBRIDGE):
                     'packets': 0,
                     'loss': 0,
                     'crcs': set()
-
                 }
 
                 # If we can, use the LC from the voice header as to keep all options intact
@@ -1570,7 +1489,6 @@ class routerOBP(OPENBRIDGE):
                 if CONFIG['REPORTS']['REPORT']:
                     self._report.send_bridgeEvent('GROUP VOICE,START,RX,{},{},{},{},{},{}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id)).encode(encoding='utf-8', errors='ignore'))
 
-
             else:
                 if 'packets' in self.STATUS[_stream_id]:
                     self.STATUS[_stream_id]['packets'] = self.STATUS[_stream_id]['packets'] +1
@@ -1588,7 +1506,6 @@ class routerOBP(OPENBRIDGE):
                         self.STATUS[_stream_id]['LOOPLOG'] = True
                     self.STATUS[_stream_id]['LAST'] = pkt_time
                     return
-                    
                 
                 #LoopControl
                 hr_times = {}
@@ -1611,7 +1528,6 @@ class routerOBP(OPENBRIDGE):
                 #use the minimum perf_counter to ensure
                 #We always use only the earliest packet
                 fi = min(hr_times, key=hr_times.get, default = False)
-                
                 hr_times = None
                 
                 if not fi:
@@ -1665,19 +1581,14 @@ class routerOBP(OPENBRIDGE):
                 if _seq and self.STATUS[_stream_id]['lastSeq'] and _seq > (self.STATUS[_stream_id]['lastSeq']+1):
                     self.STATUS[_stream_id]['loss'] += 1
                     logger.debug("(%s) *PacketControl* Missed packet(s) - last SEQ: %s, this SEQ: %s. Stream ID:, %s TGID: %s , LOSS: %.2f%%",self._system,self.STATUS[_stream_id]['lastSeq'],_seq,int_id(_stream_id),int_id(_dst_id),((self.STATUS[_stream_id]['loss'] / self.STATUS[_stream_id]['packets']) * 100))
-
             
                 #Save this sequence number 
                 self.STATUS[_stream_id]['lastSeq'] = _seq
                 #Save this packet
                 self.STATUS[_stream_id]['lastData'] = _data
-                
-
             
             self.STATUS[_stream_id]['crcs'].add(_pkt_crc)
-            
             self.STATUS[_stream_id]['LAST'] = pkt_time
-            
             
             #Create STAT bridge for unknown TG
             if CONFIG['GLOBAL']['GEN_STAT_BRIDGES']:
@@ -1691,7 +1602,6 @@ class routerOBP(OPENBRIDGE):
                         
                         if _system['SYSTEM'] == self._system and _system['TGID'] == _dst_id and _system['TS'] == _slot and _system['ACTIVE'] == True:
                             _sysIgnore = self.to_target(_peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits,_bridge,_system,False,_sysIgnore,_hops, _source_server, _ber, _rssi, _source_rptr)
-
 
             # Final actions - Is this a voice terminator?
             if (_frame_type == HBPF_DATA_SYNC) and (_dtype_vseq == HBPF_SLT_VTERM):
@@ -1780,6 +1690,7 @@ class routerHBP(HBSYSTEM):
                 '_allStarMode': False
                 }
             }
+        self.CALL_DATA = []
 
     def to_target(self, _peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits,_bridge,_system,_noOBP,sysIgnore,_source_server, _ber, _rssi, _source_rptr):
         _sysIgnore = sysIgnore
@@ -1815,7 +1726,6 @@ class routerHBP(HBSYSTEM):
                         if _target_system['USE_ACL']:
                             if not acl_check(_target['TGID'],_target_system['TG1_ACL']):
                                 continue
-                        
         
                         # Is this a new call stream on the target?
                         if (_stream_id not in _target_status):
@@ -2003,7 +1913,177 @@ class routerHBP(HBSYSTEM):
         logger.debug('(%s) UNIT Data Bridged to OBP System: %s DST_ID: %s', self._system, _target,_int_dst_id)
         if CONFIG['REPORTS']['REPORT']:
             systems[system]._report.send_bridgeEvent('UNIT DATA,DATA,TX,{},{},{},{},{},{}'.format(_target, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), 1, _int_dst_id).encode(encoding='utf-8', errors='ignore'))
-    
+
+    def pvt_call_received(self, _peer_id, _rf_src, _dst_id, _seq, _slot, _frame_type, _dtype_vseq, _stream_id, _data):
+        pkt_time = time()
+        dmrpkt = _data[20:53]
+        _bits = _data[15]
+
+        #Add system to SUB_MAP
+        SUB_MAP[_rf_src] = (self._system,_slot,pkt_time)
+        
+        # Is this a new call stream?
+        if (_stream_id != self.STATUS[_slot]['RX_STREAM_ID']):
+            
+            # Collision in progress, bail out!
+            if (self.STATUS[_slot]['RX_TYPE'] != HBPF_SLT_VTERM) and (pkt_time < (self.STATUS[_slot]['RX_TIME'] + STREAM_TO)) and (_rf_src != self.STATUS[_slot]['RX_RFS']):
+                logger.warning('(%s) PRIVATE CALL Packet received with STREAM ID: %s <FROM> SUB: %s PEER: %s <TO> UNIT %s, SLOT %s collided with existing call', self._system, int_id(_stream_id), int_id(_rf_src), int_id(_peer_id), int_id(_dst_id), _slot)
+                return
+                
+            # Create a destination list for the call:
+            if _dst_id in SUB_MAP:
+                if SUB_MAP[_dst_id][0] != self._system:
+                    self._targets = [SUB_MAP[_dst_id][0]]
+                else:
+                    self._targets = []
+                    logger.error('PRIVATE call to a subscriber on the same system, send nothing')
+            else:
+                self._targets = []
+                #self._targets.remove(self._system)
+            
+            # This is a new call stream, so log & report
+            self.STATUS[_slot]['RX_START'] = pkt_time
+            logger.info('(%s) *PRIVATE CALL START* STREAM ID: %s SUB: %s (%s) PEER: %s (%s) DST: %s (%s), TS: %s, FORWARD: %s', \
+                    self._system, int_id(_stream_id), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot, self._targets)
+            if CONFIG['REPORTS']['REPORT']:
+                self._report.send_bridgeEvent('PRIVATE VOICE,START,RX,{},{},{},{},{},{}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id)).encode(encoding='utf-8', errors='ignore'))
+
+        for _target in self._targets:
+                
+            _target_status = systems[_target].STATUS
+            _target_system = self._CONFIG['SYSTEMS'][_target]
+            
+            if self._CONFIG['SYSTEMS'][_target]['MODE'] == 'OPENBRIDGE':
+                if (_stream_id not in _target_status):
+                    # This is a new call stream on the target
+                    _target_status[_stream_id] = {
+                        'START':     pkt_time,
+                        'CONTENTION':False,
+                        'RFS':       _rf_src,
+                        'TYPE':      'UNIT',
+                        'DST':      _dst_id,
+                        'ACTIVE':   True
+                    }
+
+                    logger.info('(%s) PRIVATE call bridged to OBP System: %s TS: %s, UNIT: %s', self._system, _target, _slot if _target_system['BOTH_SLOTS'] else 1, int_id(_dst_id))
+                    if CONFIG['REPORTS']['REPORT']:
+                        systems[_target]._report.send_bridgeEvent('PRIVATE VOICE,START,TX,{},{},{},{},{},{}'.format(_target, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id)).encode(encoding='utf-8', errors='ignore'))
+
+                # Record the time of this packet so we can later identify a stale stream
+                _target_status[_stream_id]['LAST'] = pkt_time
+                # Clear the TS bit and follow propper OBP definition, unless "BOTH_SLOTS" is set. This only works for unit calls.
+                if _target_system['BOTH_SLOTS']:
+                    _tmp_bits = _bits
+                else:
+                    _tmp_bits = _bits & ~(1 << 7)
+
+                # Assemble transmit HBP packet
+                _tmp_data = b''.join([_data[:15], _tmp_bits.to_bytes(1, 'big'), _data[16:20]])
+                _data = b''.join([_tmp_data, dmrpkt])
+                
+                if (_frame_type == HBPF_DATA_SYNC) and (_dtype_vseq == HBPF_SLT_VTERM):
+                    _target_status[_stream_id]['ACTIVE'] = False
+
+            else:
+                # BEGIN STANDARD CONTENTION HANDLING
+                if (_dst_id == _target_status[_slot]['RX_TGID']) and ((pkt_time - _target_status[_slot]['RX_TIME']) < STREAM_TO):
+                    if _frame_type == HBPF_DATA_SYNC and _dtype_vseq == HBPF_SLT_VHEAD and self.STATUS[_slot]['RX_STREAM_ID'] != _stream_id:
+                        logger.info('(%s) PRIVATE Call not routed to destination %s, matching call already active on target: HBSystem: %s, TS: %s, DEST: %s', self._system, int_id(_dst_id), _target, _slot, int_id(_target_status[_slot]['RX_TGID']))
+                    continue
+                if (_dst_id == _target_status[_slot]['TX_TGID']) and (_rf_src != _target_status[_slot]['TX_RFS']) and ((pkt_time - _target_status[_slot]['TX_TIME']) < STREAM_TO):
+                    if _frame_type == HBPF_DATA_SYNC and _dtype_vseq == HBPF_SLT_VHEAD and self.STATUS[_slot]['RX_STREAM_ID'] != _stream_id:
+                        logger.info('(%s) PRIVATE Call not routed for subscriber %s, call route in progress on target: HBSystem: %s, TS: %s, DEST: %s, SUB: %s', self._system, int_id(_rf_src), _target, _slot, int_id(_target_status[_slot]['TX_TGID']), int_id(_target_status[_slot]['TX_RFS']))
+                    continue
+
+                # Record target information if this is a new call stream?
+                if (_stream_id != self.STATUS[_slot]['RX_STREAM_ID']):
+                    # Record the DST TGID and Stream ID
+                    _target_status[_slot]['TX_START'] = pkt_time
+                    _target_status[_slot]['TX_TGID'] = _dst_id
+                    _target_status[_slot]['TX_STREAM_ID'] = _stream_id
+                    _target_status[_slot]['TX_RFS'] = _rf_src
+                    _target_status[_slot]['TX_PEER'] = _peer_id
+                    
+                    logger.info('(%s) PRIVATE call bridged to HBP System: %s TS: %s, DST: %s', self._system, _target, _slot, int_id(_dst_id))
+                    if CONFIG['REPORTS']['REPORT']:
+                       systems[_target]._report.send_bridgeEvent('PRIVATE VOICE,START,TX,{},{},{},{},{},{}'.format(_target, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id)).encode(encoding='utf-8', errors='ignore'))
+
+                # Set other values for the contention handler to test next time there is a frame to forward
+                _target_status[_slot]['TX_TIME'] = pkt_time
+                _target_status[_slot]['TX_TYPE'] = _dtype_vseq
+
+            #send the call:
+            systems[_target].send_system(_data)
+        
+        # Final actions - Is this a voice terminator?
+        if (_frame_type == HBPF_DATA_SYNC) and (_dtype_vseq == HBPF_SLT_VTERM) and (self.STATUS[_slot]['RX_TYPE'] != HBPF_SLT_VTERM):
+            self._targets = []
+            call_duration = pkt_time - self.STATUS[_slot]['RX_START']
+            logger.info('(%s) *PRIVATE CALL END*   STREAM ID: %s SUB: %s (%s) PEER: %s (%s) DST: %s (%s), TS %s, Duration: %.2f', \
+                    self._system, int_id(_stream_id), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot, call_duration)
+            if CONFIG['REPORTS']['REPORT']:
+               self._report.send_bridgeEvent('PRIVATE VOICE,END,RX,{},{},{},{},{},{},{:.2f}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id), call_duration).encode(encoding='utf-8', errors='ignore'))
+
+        # Mark status variables for use later
+        self.STATUS[_slot]['RX_PEER']      = _peer_id
+        self.STATUS[_slot]['RX_SEQ']       = _seq
+        self.STATUS[_slot]['RX_RFS']       = _rf_src
+        self.STATUS[_slot]['RX_TYPE']      = _dtype_vseq
+        self.STATUS[_slot]['RX_TGID']      = _dst_id
+        self.STATUS[_slot]['RX_TIME']      = pkt_time
+        self.STATUS[_slot]['RX_STREAM_ID'] = _stream_id
+
+#    def parrot_service(self, _peer_id, _rf_src, _dst_id, _seq, _slot, _frame_type, _dtype_vseq, _stream_id, _data):
+#        pkt_time = time()
+#        # Is this is a new call stream?
+#        if (_stream_id != self.STATUS[_slot]['RX_STREAM_ID']):
+#            self.STATUS[_slot]['RX_START'] = pkt_time
+#            logger.info('(%s) *START RECORDING* STREAM ID: %s USER: %s (%s) REPEATER: %s (%s) DST: %s (%s), TS: %s', \
+#                                self._system, int_id(_stream_id), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot)
+#            if CONFIG['REPORTS']['REPORT']:
+#                self._report.send_bridgeEvent('PRIVATE VOICE,START,TX,{},{},{},{},{},{}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id)).encode(encoding='utf-8', errors='ignore'))
+#            self.CALL_DATA.append(_data)
+#            self.STATUS[_slot]['RX_STREAM_ID'] = _stream_id
+#            return
+#
+#        # Final actions - Is this a voice terminator?
+#        if (_frame_type == HBPF_DATA_SYNC) and (_dtype_vseq == HBPF_SLT_VTERM) and (self.STATUS[_slot]['RX_TYPE'] != HBPF_SLT_VTERM) and (self.CALL_DATA):
+#            call_duration = pkt_time - self.STATUS[_slot]['RX_START']
+#                #Change the stream ID
+#            self.CALL_DATA.append(_data)
+#            logger.info('(%s) *END RECORDING* STREAM ID: %s', self._system, int_id(_stream_id))
+#            if CONFIG['REPORTS']['REPORT']:
+#                self._report.send_bridgeEvent('PRIVATE VOICE,END,RX,{},{},{},{},{},{},{:.2f}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id), call_duration).encode(encoding='utf-8', errors='ignore'))
+#            sleep(2)
+#            _new_stream_id = bytes_4(randint(0x00, 0xFFFFFFFF))
+#            logger.info('(%s) *START PLAYBACK* STREAM ID: %s USER: %s (%s) REPEATER: %s (%s) DST: %s (%s), TS: %s, Duration: %s', \
+#                                self._system, int_id(_new_stream_id), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot, call_duration)
+#            if CONFIG['REPORTS']['REPORT']:
+#                self._report.send_bridgeEvent('PRIVATE VOICE,START,TX,{},{},{},{},{},{}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id)).encode(encoding='utf-8', errors='ignore'))
+#            
+#            for i in self.CALL_DATA:
+#
+#                i = i[:16] + _new_stream_id + i[20:]
+#                self.send_system(i)
+#                sleep(0.06)
+#            self.CALL_DATA = []
+#            logger.info('(%s) *END PLAYBACK* STREAM ID: %s', self._system, int_id(_new_stream_id))
+#            if CONFIG['REPORTS']['REPORT']:
+#                self._report.send_bridgeEvent('PRIVATE VOICE,END,RX,{},{},{},{},{},{},{:.2f}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id), call_duration).encode(encoding='utf-8', errors='ignore'))
+#
+#        else:
+#            if self.CALL_DATA:
+#                #Change the stream ID
+#                self.CALL_DATA.append(_data)
+#
+#        # # Mark status variables for use later
+#        self.STATUS[_slot]['RX_PEER']      = _peer_id
+#        self.STATUS[_slot]['RX_SEQ']       = _seq
+#        self.STATUS[_slot]['RX_RFS']       = _rf_src
+#        self.STATUS[_slot]['RX_TYPE']      = _dtype_vseq
+#        self.STATUS[_slot]['RX_TGID']      = _dst_id
+#        self.STATUS[_slot]['RX_TIME']      = pkt_time
+#        self.STATUS[_slot]['RX_STREAM_ID'] = _stream_id
 
     def dmrd_received(self, _peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data):
 
@@ -2012,35 +2092,22 @@ class routerHBP(HBSYSTEM):
                 logger.info('(%s) disallow transmission until reset cycle is complete',_system)
                 CONFIG['SYSTEMS'][self._system]['_resetlog'] = True
 
-
                 return
         except KeyError:
             pass
 
         pkt_time = time()
         dmrpkt = _data[20:53]
-        
         _ber = _data[53:54]
         _rssi = _data[54:55]
-        
         _bits = _data[15]
-        
         _source_server = self._CONFIG['GLOBAL']['SERVER_ID']
-        
         _source_rptr = _peer_id
-        
-        #_pkt_crc = Crc32.calc(_data[4:53])
-        #_pkt_crc = hash(_data).digest()
-        
-        #Use blake2b hash
         _h = blake2b(digest_size=16)
         _h.update(_data)
         _pkt_crc = _h.digest()
-        
         _nine = bytes_3(9)
-        
         _lang = CONFIG['SYSTEMS'][self._system]['ANNOUNCEMENT_LANGUAGE']
-        
         _int_dst_id = int_id(_dst_id)
 
         # Assume this is not a data call. We use this to prevent SMS/GPS data from triggering a reflector.
@@ -2060,16 +2127,8 @@ class routerHBP(HBSYSTEM):
             #logger.info('(%s) Type Rewrite - GPS data from ID: %s,  on TG 900999 rewritten to unit call to ID 900999 : bits %s',self._system,int_id(_rf_src),_bits)
             #_call_type == 'unit'
 
-        #Rewrite incoming loro request to group call
-        #if _call_type == 'unit' and _int_dst_id == 9990:
-            #_bits = header(_slot,'group',_bits)
-            #logger.info('(%s) Type Rewrite - Echo data from ID: %s,  on PC 9990 rewritten to group call to TG 9990',self._system,int_id(_rf_src))
-            #_call_type == 'group'
-
-
         if _call_type == 'unit' and (_dtype_vseq == 6 or _dtype_vseq == 7 or _dtype_vseq == 8 or (_stream_id != self.STATUS[_slot]['RX_STREAM_ID'] and _dtype_vseq == 3)):
             _data_call = True
-            
             self.STATUS[_slot]['packets'] = 0
             self.STATUS[_slot]['crcs'] = set()
             
@@ -2096,7 +2155,6 @@ class routerHBP(HBSYSTEM):
             else:
                     logger.info('(%s) *UNKNOW TYPE* STREAM ID: %s SUB: %s (%s) PEER: %s (%s) TGID %s (%s), TS %s', \
                             self._system, int_id(_stream_id), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot)
-            
             
             #Send all data to DATA-GATEWAY if enabled and valid
             if CONFIG['GLOBAL']['DATA_GATEWAY'] and 'DATA-GATEWAY' in CONFIG['SYSTEMS'] and CONFIG['SYSTEMS']['DATA-GATEWAY']['MODE'] == 'OPENBRIDGE' and CONFIG['SYSTEMS']['DATA-GATEWAY']['ENABLED']:
@@ -2170,12 +2228,19 @@ class routerHBP(HBSYSTEM):
                                     
                                 else:
                                     logger.debug('(%s) UNIT Data not bridged to HBP on slot %s - target busy: %s DST_ID: %s',self._system,_d_slot,_d_system,_int_dst_id)
-                                
+
+        #Handle Private Calls                       
+        if _call_type == 'unit' and len(str(_int_dst_id)) == 7:
+            self.pvt_call_received(_peer_id, _rf_src, _dst_id, _seq, _slot, _frame_type, _dtype_vseq, _stream_id, _data)
+            
+        #Handle Parrot Service
+        #if _call_type == 'unit' and _int_dst_id == 9990:
+        #    self.parrot_service(_peer_id, _rf_src, _dst_id, _seq, _slot, _frame_type, _dtype_vseq, _stream_id, _data)
+        
         #Handle AMI private calls
         if _call_type == 'unit' and not _data_call and self.STATUS[_slot]['_allStarMode'] and CONFIG['ALLSTAR']['ENABLED']:
             if (_stream_id != self.STATUS[_slot]['RX_STREAM_ID']):
                 logger.info('(%s) AMI: Private call from %s to %s',self._system, int_id(_rf_src), _int_dst_id)
-                
                     
             if (_frame_type == HBPF_DATA_SYNC) and (_dtype_vseq == HBPF_SLT_VTERM) and (self.STATUS[_slot]['RX_TYPE'] != HBPF_SLT_VTERM):
                 
@@ -2199,87 +2264,20 @@ class routerHBP(HBSYSTEM):
             self.STATUS[_slot]['RX_TIME']      = pkt_time
             self.STATUS[_slot]['RX_STREAM_ID'] = _stream_id
             self.STATUS[_slot]['VOICE_STREAM'] = _voice_call
-            
             self.STATUS[_slot]['packets'] = self.STATUS[_slot]['packets'] +1 
-            
-                
-        
-        #Handle  private voice calls (for reflectors)
+
+        #Handle AllStar Stuff
         elif _call_type == 'unit' and not _data_call and not self.STATUS[_slot]['_allStarMode']:
             if (_stream_id != self.STATUS[_slot]['RX_STREAM_ID']):
-                
+
                 self.STATUS[_slot]['packets'] = 0
                 self.STATUS[_slot]['crcs'] = set()
-                
                 self.STATUS[_slot]['_stopTgAnnounce'] = False
-                
-                logger.info('(%s) Reflector: Private call from %s to %s',self._system, int_id(_rf_src), _int_dst_id)
-                if _int_dst_id >= 5 and _int_dst_id != 8  and _int_dst_id != 9 and _int_dst_id <= 999999:
-                    _bridgename = ''.join(['#',str(_int_dst_id)])
-                    if _bridgename not in BRIDGES and not (_int_dst_id >= 4000 and _int_dst_id <= 5000) and not (_int_dst_id >=9991 and _int_dst_id <= 9999):
-                            logger.info('(%s) [A] Reflector for TG %s does not exist. Creating as User Activated. Timeout: %s',self._system, _int_dst_id,CONFIG['SYSTEMS'][self._system]['DEFAULT_UA_TIMER'])
-                            make_single_reflector(_dst_id,CONFIG['SYSTEMS'][self._system]['DEFAULT_UA_TIMER'],self._system)
-                    
-                    if _int_dst_id > 5 and _int_dst_id != 9 and _int_dst_id != 5000 and not (_int_dst_id >=9991 and _int_dst_id <= 9999):
-                        for _bridge in BRIDGES:
-                            if _bridge[0:1] != '#':
-                                continue
-                            for _system in BRIDGES[_bridge]:
-                                _dehash_bridge = _bridge[1:]
-                                if _system['SYSTEM'] == self._system:
-                                    # TGID matches a rule source, reset its timer
-                                    if _slot == _system['TS'] and _dst_id == _system['TGID'] and ((_system['TO_TYPE'] == 'ON' and (_system['ACTIVE'] == True)) or (_system['TO_TYPE'] == 'OFF' and _system['ACTIVE'] == False)):
-                                        _system['TIMER'] = pkt_time + _system['TIMEOUT']
-                                        logger.info('(%s) [B] Transmission match for Reflector: %s. Reset timeout to %s', self._system, _bridge, _system['TIMER'])
-                            
-                                # TGID matches an ACTIVATION trigger
-                                if _int_dst_id == int(_dehash_bridge) and _system['SYSTEM'] == self._system and  _slot == _system['TS']:
-                                    # Set the matching rule as ACTIVE
-                                    if _system['ACTIVE'] == False:
-                                        _system['ACTIVE'] = True
-                                        _system['TIMER'] = pkt_time + _system['TIMEOUT']
-                                        logger.info('(%s) [C] Reflector: %s, connection changed to state: %s', self._system, _bridge, _system['ACTIVE'])
-                                        # Cancel the timer if we've enabled an "OFF" type timeout
-                                        if _system['TO_TYPE'] == 'OFF':
-                                            _system['TIMER'] = pkt_time
-                                            logger.info('(%s) [D] Reflector: %s has an "OFF" timer and set to "ON": timeout timer cancelled', self._system, _bridge)
-                                # Reset the timer for the rule
-                                if _system['ACTIVE'] == True and _system['TO_TYPE'] == 'ON':
-                                    _system['TIMER'] = pkt_time + _system['TIMEOUT']
-                                    logger.info('(%s) [E] Reflector: %s, timeout timer reset to: %s', self._system, _bridge, _system['TIMER'] - pkt_time)
 
-                                # TGID matches an DE-ACTIVATION trigger
-                                #Single TG mode
-                                if (_dst_id in _system['OFF']  or _dst_id in _system['RESET'] or (_int_dst_id != int(_dehash_bridge)) and _system['SYSTEM'] == self._system and _slot == _system['TS']):
-                                        # Set the matching rule as ACTIVE
-                                        #Single TG mode
-                                        if _dst_id in _system['OFF'] or _int_dst_id != int(_dehash_bridge) :
-                                            if _system['ACTIVE'] == True:
-                                                _system['ACTIVE'] = False
-                                                logger.info('(%s) [F] Reflector: %s, connection changed to state: %s', self._system, _bridge, _system['ACTIVE'])
-                                                # Cancel the timer if we've enabled an "ON" type timeout
-                                                if _system['TO_TYPE'] == 'ON':
-                                                    _system['TIMER'] = pkt_time
-                                                    logger.info('(%s) [G] Reflector: %s has ON timer and set to "OFF": timeout timer cancelled', self._system, _bridge)
-                                        # Reset the timer for the rule
-                                        if _system['ACTIVE'] == False and _system['TO_TYPE'] == 'OFF':
-                                            _system['TIMER'] = pkt_time + _system['TIMEOUT']
-                                            logger.info('(%s) [H] Reflector: %s, timeout timer reset to: %s', self._system, _bridge, _system['TIMER'] - pkt_time)
-                                        # Cancel the timer if we've enabled an "ON" type timeout
-                                        if _system['ACTIVE'] == True and _system['TO_TYPE'] == 'ON' and _dst_id in _system['OFF']:
-                                            _system['TIMER'] = pkt_time
-                                            logger.info('(%s) [I] Reflector: %s has ON timer and set to "OFF": timeout timer cancelled', self._system, _bridge)
-            
-            
+            # Final actions - Is this a voice terminator?
             if (_frame_type == HBPF_DATA_SYNC) and (_dtype_vseq == HBPF_SLT_VTERM) and (self.STATUS[_slot]['RX_TYPE'] != HBPF_SLT_VTERM):
+                _say = []
                 
-                _say = [words[_lang]['silence']]
-
-                if _int_dst_id < 8 or _int_dst_id == 9 :
-                    logger.info('(%s) Reflector: voice called - TG <  8 or 9 - "busy""', self._system)
-                    _say.append(words[_lang]['busy'])
-                    _say.append(words[_lang]['silence'])
-                    self.STATUS[_slot]['_stopTgAnnounce'] = True
                     
                 #Allstar mode switch
                 if CONFIG['ALLSTAR']['ENABLED'] and _int_dst_id == 8:
@@ -2294,62 +2292,12 @@ class routerHBP(HBSYSTEM):
                     _say.append(words[_lang]['busy'])
                     _say.append(words[_lang]['silence'])
                     self.STATUS[_slot]['_stopTgAnnounce'] = True
-                    
-                    
-                
-                #If disconnection called
-                if _int_dst_id == 4000:
-                    logger.info('(%s) Reflector: voice called - 4000 "not linked"', self._system)
-                    _say.append(words[_lang]['notlinked'])
-                    _say.append(words[_lang]['silence'])
-                
-                #If status called
-                elif _int_dst_id == 5000:
-                    _active = False
-                    for _bridge in BRIDGES:
-                        if _bridge[0:1] != '#':
-                            continue
-                        for _system in BRIDGES[_bridge]:
-                            _dehash_bridge = _bridge[1:]
-                            if _system['SYSTEM'] == self._system and _slot == _system['TS']:
-                                    if _system['ACTIVE'] == True:
-                                        logger.info('(%s) Reflector: voice called - 5000 status - "linked to %s"', self._system,_dehash_bridge)
-                                        _say.append(words[_lang]['silence'])
-                                        _say.append(words[_lang]['linkedto'])
-                                        _say.append(words[_lang]['silence'])
-                                        _say.append(words[_lang]['to'])
-                                        _say.append(words[_lang]['silence'])
-                                        _say.append(words[_lang]['silence']) 
-                                        
-                                        for num in str(_dehash_bridge):
-                                            _say.append(words[_lang][num])
-                                        
-                                        _active = True
-                                        break
-                        
-                    if _active == False:
-                        logger.info('(%s) Reflector: voice called - 5000 status - "not linked"', self._system)
-                        _say.append(words[_lang]['notlinked'])
-                
+                                
                 #Information services
                 elif _int_dst_id >= 9991 and _int_dst_id <= 9999:
                     self.STATUS[_slot]['_stopTgAnnounce'] = True
                     reactor.callInThread(playFileOnRequest,self,_int_dst_id)
                     #playFileOnRequest(self,_int_dst_id)
-                    
-                
-                #Speak what TG was requested to link
-                elif not self.STATUS[_slot]['_stopTgAnnounce']:
-                    logger.info('(%s) Reflector: voice called (linking)  "linked to %s"', self._system,_int_dst_id)
-                    _say.append(words[_lang]['silence'])
-                    _say.append(words[_lang]['linkedto'])
-                    _say.append(words[_lang]['silence'])
-                    _say.append(words[_lang]['to'])
-                    _say.append(words[_lang]['silence'])
-                    _say.append(words[_lang]['silence'])
-                    
-                    for num in str(_int_dst_id):
-                        _say.append(words[_lang][num])
 
                 if _say:
                     speech = pkt_gen(bytes_3(5000), _nine, bytes_4(9), 1, _say)
@@ -2365,8 +2313,7 @@ class routerHBP(HBSYSTEM):
             self.STATUS[_slot]['RX_TIME']      = pkt_time
             self.STATUS[_slot]['RX_STREAM_ID'] = _stream_id
             self.STATUS[_slot]['VOICE_STREAM'] = _voice_call
-            
-            self.STATUS[_slot]['packets'] = self.STATUS[_slot]['packets'] +1                
+            self.STATUS[_slot]['packets'] = self.STATUS[_slot]['packets'] +1 
         
         #Handle group calls
         if _call_type == 'group' or _call_type == 'vcsbk':
@@ -2626,7 +2573,6 @@ class routerHBP(HBSYSTEM):
             self.STATUS[_slot]['RX_TGID']      = _dst_id
             self.STATUS[_slot]['RX_TIME']      = pkt_time
             self.STATUS[_slot]['RX_STREAM_ID'] = _stream_id
-            
             self.STATUS[_slot]['crcs'].add(_pkt_crc)
 
 #
@@ -2643,11 +2589,9 @@ class bridgeReportFactory(reportFactory):
             _data = _data.decode('utf-8', error='ignore')
         self.send_clients(b''.join([REPORT_OPCODES['BRDG_EVENT'],_data]))
 
-
 #************************************************
 #      MAIN PROGRAM LOOP STARTS HERE
 #************************************************
-
 if __name__ == '__main__':
 
     import argparse
@@ -2663,7 +2607,6 @@ if __name__ == '__main__':
     PEER_MAX = 4294967295
     
     ID_MAX = 16776415
-
 
     #Set process title early
     setproctitle(__file__)
@@ -2681,7 +2624,6 @@ if __name__ == '__main__':
     # Ensure we have a path for the config file, if one wasn't specified, then use the default (top of file)
     if not cli_args.CONFIG_FILE:
         cli_args.CONFIG_FILE = os.path.dirname(os.path.abspath(__file__))+'/hblink.cfg'
-
 
     #configP = False
     #if os.path.isfile('config.pkl'):
@@ -2711,13 +2653,11 @@ if __name__ == '__main__':
     logger.info('\n\nCopyright (c) 2020, 2021, 2022, 2023 Simon G7RZU simon@gb7fr.org.uk')
     logger.info('Copyright (c) 2013, 2014, 2015, 2016, 2018, 2019\n\tThe Regents of the K0USY Group. All rights reserved.\n')
     logger.debug('(GLOBAL) Logging system started, anything from here on gets logged')
-
         
     if CONFIG['ALLSTAR']['ENABLED']:
         logger.info('(AMI) Setting up AMI: Server: %s, Port: %s, User: %s, Pass: %s, Node: %s',CONFIG['ALLSTAR']['SERVER'],CONFIG['ALLSTAR']['PORT'],CONFIG['ALLSTAR']['USER'],CONFIG['ALLSTAR']['PASS'],CONFIG['ALLSTAR']['NODE'])
         
         AMIOBJ = AMI(CONFIG['ALLSTAR']['SERVER'],CONFIG['ALLSTAR']['PORT'],CONFIG['ALLSTAR']['USER'],CONFIG['ALLSTAR']['PASS'],CONFIG['ALLSTAR']['NODE'])
-            
 
     # Set up the signal handler
     def sig_handler(_signal, _frame):
@@ -2728,7 +2668,6 @@ if __name__ == '__main__':
             CONFIG['GLOBAL']['_KILL_SERVER'] = True
         else:
             exit()
-
 
     #Server kill routine
     def kill_server():
@@ -2751,7 +2690,6 @@ if __name__ == '__main__':
         signal.signal(signal.SIGTERM, sig_handler)
         signal.signal(signal.SIGINT, sig_handler)
 
-
     # Create the name-number mapping dictionaries
     peer_ids, subscriber_ids, talkgroup_ids, local_subscriber_ids, server_ids, checksums = mk_aliases(CONFIG)
     
@@ -2764,8 +2702,6 @@ if __name__ == '__main__':
     CONFIG['_LOCAL_SUBSCRIBER_IDS'] = local_subscriber_ids
     CONFIG['_SERVER_IDS'] = server_ids
     CONFIG['CHECKSUMS'] = checksums
-
-    
     
     # Import the ruiles file as a module, and create BRIDGES from it
     #spec = importlib.util.spec_from_file_location("module.name", cli_args.RULES_FILE)
@@ -2791,20 +2727,14 @@ if __name__ == '__main__':
         #os.unlink("bridge.pkl")
     #else:
 
-
     if 'ECHO' in CONFIG['SYSTEMS'] and CONFIG['SYSTEMS']['ECHO']['MODE'] == 'PEER':
         BRIDGES = make_bridges({'9990': [{'SYSTEM': 'ECHO', 'TS': 2, 'TGID': 9990, 'ACTIVE': True, 'TIMEOUT': 2, 'TO_TYPE': 'NONE', 'ON': [], 'OFF': [], 'RESET': []},]})
     else:
         BRIDGES = {}
-
-
-
-
-
+    #BRIDGES = {}
     #Subscriber map for unit calls - complete with test entry
     #SUB_MAP = {bytes_3(73578):('REP-1',1,time())}
     SUB_MAP = {}
-    
     
     if CONFIG['ALIASES']['SUB_MAP_FILE']:
         try:
@@ -2816,7 +2746,6 @@ if __name__ == '__main__':
         
         #Test value
         #SUB_MAP[bytes_3(73578)] = ('REP-1',1,time())
-    
     
     #Generator
     generator = {}
@@ -2905,10 +2834,8 @@ if __name__ == '__main__':
 
     # HBlink instance creation
     logger.info('(GLOBAL) ADN \'bridge_master.py\' -- SYSTEM STARTING...')
-
     
     listeningPorts = {}
-
     
     for system in CONFIG['SYSTEMS']:
         if CONFIG['SYSTEMS'][system]['ENABLED']:
@@ -2997,7 +2924,6 @@ if __name__ == '__main__':
         debug_bridges_task = task.LoopingCall(bridgeDebug)
         debug_bridges = debug_bridges_task.start(66)
         debug_bridges.addErrback(loopingErrHandle)
-
     
     #Subscriber map trimmer
     sub_trimmer_task = task.LoopingCall(SubMapTrimmer)

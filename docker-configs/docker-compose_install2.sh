@@ -292,7 +292,7 @@ echo Get docker-compose.yml...
 cd /etc/ADN-Systems &&
 curl https://raw.githubusercontent.com/Amateur-Digital-Network/ADN-DMR-Peer-Server/develop/docker-configs/docker-compose2.yml -o docker-compose.yml &&
 
-if [ "$(cat /proc/cpuinfo | grep 'Raspberry')" != "" ]; then
+if [[ "$(uname -m)" == "arm64" || "$(uname -m)" == "aarch64" ]]; then
 sed -i "s/cpu_shares: 1024/#cpu_shares: 1024/g"  /etc/ADN-Systems/docker-compose.yml
 sed -i "s/mem_reservation: 600m/#mem_reservation: 600m/g"  /etc/ADN-Systems/docker-compose.yml
 sed -i "s/adn-server-self-service:latest/adn-server-self-service:rpi/g"  /etc/ADN-Systems/docker-compose.yml

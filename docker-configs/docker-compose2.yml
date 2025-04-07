@@ -35,6 +35,7 @@ services:
 
     monitor:
         container_name: monitor
+        cpu_shares: 512
         restart: "always"
          # Before enabling local mapping, download the file to the host machine: 
          # docker cp monitor:/opt/FDMR-Monitor/fdmr-mon.cfg .

@@ -79,21 +79,76 @@ chown 54000:54000 /etc/ADN-Systems/data &&
 
 echo Install /etc/ADN-Systems/adn.cfg ... 
 cat << EOF > /etc/ADN-Systems/adn.cfg
-#This empty config file will use defaults for everything apart from OBP and HBP config
-#This is usually a sensible choice. 
-
-
 [GLOBAL]
+PATH: ./
+PING_TIME: 10
+MAX_MISSED: 3
+USE_ACL: True
+REG_ACL: PERMIT:ALL
+SUB_ACL: DENY:1
+TGID_TS1_ACL: PERMIT:ALL
+TGID_TS2_ACL: PERMIT:ALL
+GEN_STAT_BRIDGES: True
+ALLOW_NULL_PASSPHRASE: True
+ANNOUNCEMENT_LANGUAGES:
 SERVER_ID: 0000
-DEBUG_BRIDGES: True
+DATA_GATEWAY: False
+VALIDATE_SERVER_IDS: True
 
 [REPORTS]
+REPORT: True
+REPORT_INTERVAL: 60
+REPORT_PORT: 4321
+REPORT_CLIENTS: *
 
-[LOGGER] 
+[LOGGER]
+LOG_FILE: /dev/null
+LOG_HANDLERS: console-timed
+LOG_LEVEL: DEBUG
+LOG_NAME: ADN
 
 [ALIASES]
+TRY_DOWNLOAD: True
+PATH: ./data/
+PEER_FILE: peer_ids.json
+SUBSCRIBER_FILE: subscriber_ids.json
+TGID_FILE: talkgroup_ids.json
+PEER_URL: https://adn.systems/files/peer_ids.json
+SUBSCRIBER_URL: https://adn.systems/files/subscriber_ids.json
+TGID_URL: https://adn.systems/files/talkgroup_ids.json
+SERVER_ID_URL: https://adn.systems/files/server_ids.tsv
+CHECKSUM_URL: https://adn.systems/files/file_checksums.json
+LOCAL_SUBSCRIBER_FILE: subscriber_ids.json
+STALE_DAYS: 1
+SUB_MAP_FILE: sub_map.pkl
+SERVER_ID_FILE: server_ids.tsv
+CHECKSUM_FILE: file_checksums.json
+KEYS_FILE: keys.json
 
+#Control server shared allstar instance via dial / AMI
 [ALLSTAR]
+ENABLED: False
+USER:llcgi
+PASS: mypass
+SERVER: my.asl.server
+PORT: 5038
+NODE: 0000
+
+[OBP-TEST]
+MODE: OPENBRIDGE
+ENABLED: False
+IP:
+PORT: 62044
+NETWORK_ID: 1
+PASSPHRASE: mypass
+TARGET_IP: 
+TARGET_PORT: 62044
+USE_ACL: True
+SUB_ACL: DENY:1
+TGID_ACL: DENY:0-82,92-199,800-899,9990-9999,900999
+RELAX_CHECKS: True
+ENHANCED_OBP: True
+PROTO_VER: 5
 
 [SYSTEM]
 MODE: MASTER
@@ -101,7 +156,7 @@ ENABLED: True
 REPEAT: True
 MAX_PEERS: 1
 EXPORT_AMBE: False
-IP: 127.0.0.1
+IP: 
 PORT: 56400
 PASSPHRASE:
 GROUP_HANGTIME: 5
@@ -122,7 +177,6 @@ ALLOW_UNREG_ID: False
 PROXY_CONTROL: False
 OVERRIDE_IDENT_TG:
 
-#Echo (Loro / Parrot) server
 [ECHO]
 MODE: MASTER
 ENABLED: True

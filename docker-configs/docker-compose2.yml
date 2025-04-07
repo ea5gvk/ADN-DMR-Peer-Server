@@ -1,0 +1,74 @@
+version: '2.4'
+services:
+
+    adn-server:
+        container_name: adn-server
+        cpu_shares: 1024
+        mem_reservation: 600m
+         # Before enabling local mapping, download the file to the host machine: 
+         # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
+#        volumes:
+#            - './adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg:ro'
+#        ports:
+            #Change the below to inlude ports used for your OBP(s)
+#            - '62041:62041/udp'
+        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
+        image: 'registry.gitlab.com/hp3icc/fdmr/adn-server-self-service:latest'
+        restart: "unless-stopped"
+        logging:
+          driver: none
+        networks:
+          - bridge
+
+    mariadb:
+        image: 'lscr.io/linuxserver/mariadb:latest'
+        container_name: mariadb
+        restart: "always"
+        volumes:
+            - './mysql:/config'
+        environment:
+            - MYSQL_ROOT_PASSWORD=hbmon
+        logging:
+          driver: none
+        networks:
+          - bridge
+
+    monitor:
+        container_name: monitor
+        restart: "always"
+         # Before enabling local mapping, download the file to the host machine: 
+         # docker cp monitor:/opt/FDMR-Monitor/fdmr-mon.cfg .
+#        volumes:
+#             - './fdmr-mon.cfg:/opt/FDMR-Monitor/fdmr-mon.cfg:ro'
+        ports:
+            - '80:80/tcp'
+            - '443:443/tcp'
+            - '9000:9000'
+            - '62031:62031/udp'
+        depends_on:
+            - 'adn-server'
+            - 'mariadb'
+        environment:
+            - MYSQLUSER=root
+            - MYSQLPASS=hbmon
+        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
+        image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-selfservice:latest'
+        logging:
+          driver: none
+        networks:
+          - bridge
+
+    autoheal:
+        image: willfarrell/autoheal:latest
+        tty: true
+        container_name: autoheal
+        restart: always
+        environment:
+            - AUTOHEAL_CONTAINER_LABEL=all
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  bridge:
+    driver: bridge
+

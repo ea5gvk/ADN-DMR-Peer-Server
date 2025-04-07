@@ -124,37 +124,31 @@ OVERRIDE_IDENT_TG:
 
 #Echo (Loro / Parrot) server
 [ECHO]
-MODE: PEER
+MODE: MASTER
 ENABLED: True
-LOOSE: False
+REPEAT: True
+MAX_PEERS: 1
 EXPORT_AMBE: False
 IP: 127.0.0.1
 PORT: 54917
-MASTER_IP: 127.0.0.1
-MASTER_PORT: 54915
-PASSPHRASE: passw0rd
-CALLSIGN: ECHO
-RADIO_ID: 1000001
-RX_FREQ: 449000000
-TX_FREQ: 444000000
-TX_POWER: 25
-COLORCODE: 1
-SLOTS: 1
-LATITUDE: 00.0000
-LONGITUDE: 000.0000
-HEIGHT: 0
-LOCATION: 9990 Parrot
-DESCRIPTION: ECHO
-URL: adn.systems
-SOFTWARE_ID: 20170620
-PACKAGE_ID: MMDVM_ADN-Systems
+PASSPHRASE:
 GROUP_HANGTIME: 5
-OPTIONS:
 USE_ACL: True
+REG_ACL: DENY:1
 SUB_ACL: DENY:1
-TGID_TS1_ACL: PERMIT:ALL
-TGID_TS2_ACL: PERMIT:ALL
+TGID_TS1_ACL: DENY:ALL
+TGID_TS2_ACL: PERMIT:9990
+DEFAULT_UA_TIMER: 1
+SINGLE_MODE: True
+VOICE_IDENT: False
+TS1_STATIC:
+TS2_STATIC:9990
+DEFAULT_REFLECTOR: 0
 ANNOUNCEMENT_LANGUAGE: en_GB
+GENERATOR: 0
+ALLOW_UNREG_ID: True
+PROXY_CONTROL: False
+OVERRIDE_IDENT_TG:
 
 [D-APRS]
 MODE: MASTER
@@ -177,7 +171,7 @@ VOICE_IDENT: False
 TS1_STATIC:
 TS2_STATIC:
 DEFAULT_REFLECTOR: 0
-ANNOUNCEMENT_LANGUAGE: en_GB
+ANNOUNCEMENT_LANGUAGE: es_ES
 GENERATOR: 2
 ALLOW_UNREG_ID: True
 PROXY_CONTROL: False
@@ -290,7 +284,7 @@ echo Get docker-compose.yml...
 cd /etc/ADN-Systems &&
 curl https://raw.githubusercontent.com/Amateur-Digital-Network/ADN-DMR-Peer-Server/develop/docker-configs/docker-compose.yml -o docker-compose.yml &&
 
-if [ "$(cat /proc/cpuinfo | grep 'Raspberry')" != "" ]; then
+if [[ "$(uname -m)" == "arm64" || "$(uname -m)" == "aarch64" ]]; then
 sed -i "s/cpu_shares: 1024/#cpu_shares: 1024/g"  /etc/ADN-Systems/docker-compose.yml
 sed -i "s/mem_reservation: 600m/#mem_reservation: 600m/g"  /etc/ADN-Systems/docker-compose.yml
 sed -i "s/adn-server-single:latest/adn-server-single:rpi/g"  /etc/ADN-Systems/docker-compose.yml

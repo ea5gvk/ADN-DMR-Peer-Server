@@ -217,7 +217,7 @@ class Proxy(DatagramProtocol):
                 else:
                     self.rptlTrack[host] += 1
 
-                if self.rptlTrack[host] > 20:
+                if self.rptlTrack[host] > 50:
                     print('(RPTL) exceeded max: {}'.format(self.rptlTrack[host]))
                     _bltime = nowtime + 600
                     self.IPBlackList[host] = _bltime

@@ -23,42 +23,37 @@ services:
         container_name: adn-server
         cpu_shares: 1024
         mem_reservation: 600m
+         # Before enabling local mapping, download the file to the host machine: 
+         # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
         volumes:
-            - '/etc/ADN-Systems/adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg'
+            - './adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg'
+         # Change the below to inlude ports used for your OBP(s)
         ports:
             - '62031:62031/udp'
-            #Change the below to inlude ports used for your OBP(s)
-            - '62041:62041/udp'
-            - '8000:8000'
+#            - '62041:62041/udp'
+        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-server-single:latest'
         restart: "unless-stopped"
         logging:
           driver: none
         networks:
           - bridge
-        #Control parameters inside container
-        environment:
-            #IPV6 support 
-            - FDPROXY_IPV6=0
-            #Display connection stats in log
-            - FDPROXY_STATS=1
-            #Display conneting client info in log
-            - FDPROXY_CLIENTINFO=1
-            #Debug HBP session in log (lots of data!!)
-            - FDPROXY_DEBUG=0
-            #Override proxy external port
-            #- FDPROXY_LISTENPORT=62031
-
 
     adn-dashboard:
         container_name: adn-dashboard
         cpu_shares: 512
+         # Before enabling local mapping, download the file to the host machine: 
+         # docker cp monitor:/opt/FDMR-Monitor/fdmr-mon.cfg .
         volumes:
-             - '/etc/ADN-Systems/fdmr-mon.cfg:/opt/FDMR-Monitor/fdmr-mon.cfg'
+             - './fdmr-mon.cfg:/opt/FDMR-Monitor/fdmr-mon.cfg'
+#             - './logo.png:/var/www/html/img/logo.png:ro'
+#             - './bk.jpg:/var/www/html/img/bk.jpg:ro'
+#             - './favicon.ico:/var/www/html/img/favicon.ico:ro'
         ports:
             - '80:80/tcp'
-            - '443:443/tcp'
+           # - '443:443/tcp'
             - '9000:9000'
+        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-single:latest'
         restart: "unless-stopped"
           #Set USE_SSL = to True to enable TLS support

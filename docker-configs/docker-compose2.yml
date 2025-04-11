@@ -1,3 +1,21 @@
+###############################################################################  
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software Foundation,
+#   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
+#
+###############################################################################
+
 version: '2.4'
 services:
 
@@ -9,8 +27,8 @@ services:
          # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
         volumes:
             - './adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg:ro'
+         # Change the below to inlude ports used for your OBP(s)
 #        ports:
-            #Change the below to inlude ports used for your OBP(s)
 #            - '62041:62041/udp'
         # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-server-self-service:latest'
@@ -41,9 +59,12 @@ services:
          # docker cp monitor:/opt/FDMR-Monitor/fdmr-mon.cfg .
         volumes:
              - './fdmr-mon.cfg:/opt/FDMR-Monitor/fdmr-mon.cfg:ro'
+#             - './logo.png:/var/www/html/img/logo.png:ro'
+#             - './bk.jpg:/var/www/html/img/bk.jpg:ro'
+#             - './favicon.ico:/var/www/html/img/favicon.ico:ro'
         ports:
             - '80:80/tcp'
-            - '443:443/tcp'
+           # - '443:443/tcp'
             - '9000:9000'
             - '62031:62031/udp'
         depends_on:

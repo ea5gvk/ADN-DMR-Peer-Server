@@ -43,32 +43,30 @@ services:
         container_name: adn-dashboard
         cpu_shares: 512
          # Before enabling local mapping, download the file to the host machine: 
-         # docker cp monitor:/opt/FDMR-Monitor/fdmr-mon.cfg .
+         # DASHBOARD Style:   1 for OA4DOA , dash 2 for CS8ABG
+         # file config dash 1 :     docker cp monitor:/opt/FDMR-Monitor1/fdmr-mon.cfg .
+         # file config dash 2 :     docker cp monitor:/opt/FDMR-Monitor2/fdmr-mon.cfg .
         volumes:
-             - './fdmr-mon.cfg:/opt/FDMR-Monitor/fdmr-mon.cfg:ro'
-#             - './logo.png:/var/www/html/img/logo.png:ro'
-#             - './bk.jpg:/var/www/html/img/bk.jpg:ro'
-#             - './favicon.ico:/var/www/html/img/favicon.ico:ro'
+            - './fdmr-mon.cfg:/opt/FDMR-Monitor2/fdmr-mon.cfg:ro'
+#            - './logo.png:/opt/FDMR-Monitor2/html/img/logo.png:ro'
+#            - './bk.jpg:/opt/FDMR-Monitor2/html/img/bk.jpg:ro'
+#            - './favicon.ico:/opt/FDMR-Monitor2/html/img/favicon.ico:ro'
         ports:
             - '80:80/tcp'
-           # - '443:443/tcp'
+            - '443:443/tcp'
             - '9000:9000'
+        environment:
+          # For info TZ list:   https://gist.github.com/alejzeis/ad5827eb14b5c22109ba652a1a267af5#file-timezone-mappings-csv
+            - TZ=America/Panama
+          # Select DASHBOARD Style:   1 to OA4DOA , dash 2 to CS8ABG
+            - DASHBOARD=2
+          # To enable SSL, enter the dashboard's DNS and your email account.
+            - USE_SSL=False
+            - DNS_URL=
+            - EMAIL=
         # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-single:latest'
         restart: "unless-stopped"
-          #Set USE_SSL = to True to enable TLS support
-          #you'll need to actually generate the certtificates too
-          #using these commands when the container is running:
-
-          #docker exec -it adn-dashboard gencert.sh <admin email> <server FQDN>
-          #docker-compose restart adn-dashboard
-
-          #This only needs to be done once - unless the files in the volumes above are deleted.
-
-          #The container will handle renewing the certificates every 60 days.  
-
-          #Note -the gencert.sh script only works when the webserver is available on the default port 80  
-          #If it's on non-standard ports, you'll need to request the certificates manually. 
         logging:
           driver: none
         networks:

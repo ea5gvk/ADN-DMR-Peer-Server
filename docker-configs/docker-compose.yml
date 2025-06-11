@@ -41,16 +41,15 @@ services:
 
     adn-dashboard:
         container_name: adn-dashboard
-        cpu_shares: 512
          # Before enabling local mapping, download the file to the host machine: 
          # DASHBOARD Style:   1 for OA4DOA , dash 2 for CS8ABG
          # file config dash 1 :     docker cp monitor:/opt/FDMR-Monitor1/fdmr-mon.cfg .
          # file config dash 2 :     docker cp monitor:/opt/FDMR-Monitor2/fdmr-mon.cfg .
-        volumes:
-            - './fdmr-mon.cfg:/opt/FDMR-Monitor2/fdmr-mon.cfg:ro'
-#            - './logo.png:/opt/FDMR-Monitor2/html/img/logo.png:ro'
-#            - './bk.jpg:/opt/FDMR-Monitor2/html/img/bk.jpg:ro'
-#            - './favicon.ico:/opt/FDMR-Monitor2/html/img/favicon.ico:ro'
+#        volumes:
+#             - './fdmr-mon.cfg:/opt/FDMR-Monitor2/fdmr-mon.cfg:ro'
+#             - './logo.png:/opt/FDMR-Monitor2/html/img/logo.png:ro'
+#             - './bk.jpg:/opt/FDMR-Monitor2/html/img/bk.jpg:ro'
+#             - './favicon.ico:/opt/FDMR-Monitor2/html/img/favicon.ico:ro'
         ports:
             - '80:80/tcp'
             - '443:443/tcp'
@@ -64,6 +63,35 @@ services:
             - USE_SSL=False
             - DNS_URL=
             - EMAIL=
+          # Dashboard Title
+            - DASHTITLE=ADN Systems Server
+          # Background image True or False if True put a bk.jpg 1920x1080 in img folder
+            - BACKGROUND=True
+          # available languages: en, es, fr, pt, it, nl, de, ru, ua, gr, hu, tr
+            - LANGUAGE=en
+          # Navbar Title
+            - NAVTITLE=ADN Systems
+          # Navbar Links Name, SAMPLE: NAV_LNK_NAME=LINKS
+          # LINKx put as many as you want, SAMPLE: LINK1=NameX,http://url.com
+            - NAV_LNK_NAME=
+            - LINK1=NameX,http://url.link
+            - LINK2=NameX,https://site.link
+            - LINK3=NameX,https://goaway.link 
+          # World Wide Server List, SAMPLE: http://url/Hosts.csv
+            - SERVER_LIST=
+          # World Wide Bridge List, SAMPLE: https://url/Bridges.csv
+            - BRIDGES_LIST=
+          # World Wide TalkGroups List, SAMPLE: https://url/Talkgroups.csv
+            - TG_LIST=
+          # Social Networks #
+            - TELEGRAM=
+            - WHATSAPP=
+            - FACEBOOK=
+          # Footer Links #
+          # FOOTER LEFT SAMPLE: SYSOP <a href='http://your.link'>N0CALL</a>
+            - FOOTER1=
+          # FOOTER RIGHT SAMPLE: Your Project <a href='http://your.link'>Project</a> 
+            - FOOTER2= 
         # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-single:latest'
         restart: "unless-stopped"

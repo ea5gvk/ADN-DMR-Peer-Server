@@ -25,8 +25,8 @@ services:
         mem_reservation: 512m
          # Before enabling local mapping, download the file to the host machine: 
          # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
-#        volumes:
-#            - './adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg:ro'
+        volumes:
+            - './adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg:ro'
          # Change the below to inlude ports used for your OBP(s)
         ports:
             - '62031:62031/udp'

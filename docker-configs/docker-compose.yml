@@ -22,7 +22,7 @@ services:
     adn-server:
         container_name: adn-server
         cpu_shares: 1024
-        mem_reservation: 600m
+        mem_reservation: 512m
          # Before enabling local mapping, download the file to the host machine: 
          # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
         volumes:
@@ -31,7 +31,7 @@ services:
         ports:
             - '62031:62031/udp'
 #            - '62041:62041/udp'
-        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
+        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-server-single:latest'
         restart: "unless-stopped"
         logging:
@@ -41,6 +41,7 @@ services:
 
     adn-dashboard:
         container_name: adn-dashboard
+        mem_reservation: 512m
          # Before enabling local mapping, download the file to the host machine: 
          # DASHBOARD Style:   1 for OA4DOA , dash 2 for CS8ABG
          # file config dash 1 :     docker cp monitor:/opt/FDMR-Monitor1/fdmr-mon.cfg .
@@ -92,7 +93,7 @@ services:
             - FOOTER1=
           # FOOTER RIGHT SAMPLE: Your Project <a href='http://your.link'>Project</a> 
             - FOOTER2= 
-        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
+        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-single:latest'
         restart: "unless-stopped"
         logging:

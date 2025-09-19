@@ -22,7 +22,7 @@ services:
     adn-server:
         container_name: adn-server
         cpu_shares: 1024
-        mem_reservation: 600m
+        mem_reservation: 512m
          # Before enabling local mapping, download the file to the host machine: 
          # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
         volumes:
@@ -30,7 +30,7 @@ services:
          # Change the below to inlude ports used for your OBP(s)
 #        ports:
 #            - '62041:62041/udp'
-        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
+        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-server-self-service:latest'
         restart: "unless-stopped"
         logging:
@@ -53,6 +53,7 @@ services:
 
     monitor:
         container_name: monitor
+        mem_reservation: 512m
         restart: "always"
          # Before enabling local mapping, download the file to the host machine: 
          # DASHBOARD Style:   1 for OA4DOA , dash 2 for CS8ABG
@@ -111,22 +112,12 @@ services:
             - FOOTER1=
           # FOOTER RIGHT SAMPLE: Your Project <a href='http://your.link'>Project</a> 
             - FOOTER2= 
-        # For x86_64 host devices use tag :latest , and for Raspberry arm64 / arch64 devices use tag :rpi
+        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-selfservice:latest'
         logging:
           driver: none
         networks:
           - bridge
-
-    autoheal:
-        image: willfarrell/autoheal:latest
-        tty: true
-        container_name: autoheal
-        restart: always
-        environment:
-            - AUTOHEAL_CONTAINER_LABEL=all
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
 
 networks:
   bridge:

@@ -21,55 +21,14 @@ echo remove ipv6...
 bash -c "$(curl -fsSLk https://gitlab.com/hp3icc/emq-TE1/-/raw/main/install/ipv6off.sh)" &&
 
 echo ADN-DMR-Peer-Server Docker installer...
-
-echo Installing required packages...
-echo Install Docker Community Edition...
-apt-get -y remove docker docker-engine docker.io &&
-apt-get -y update &&
-apt-get -y install apt-transport-https ca-certificates curl gnupg2 software-properties-common &&
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add - &&
-ARCH=`/usr/bin/arch`
-echo "System architecture is $ARCH" 
-if [ "$ARCH" == "x86_64" ]
-then
-    ARCH="amd64"
+if ! command -v docker &> /dev/null; then
+    echo "Docker no está instalado. Instalando..."
+    bash -c "$(curl -fsSLk https://gitlab.com/hp3icc/emq-TE1/-/raw/main/install/docker.sh)"
+else
+    echo "Docker ya está instalado."
 fi
-add-apt-repository \
-   "deb [arch=$ARCH] https://download.docker.com/linux/debian \
-   $(lsb_release -cs) \
-   stable" &&
-apt-get -y update &&
-apt-get -y install docker-ce &&
-
-echo Install Docker Compose...
-apt-get -y install docker-compose &&
-
-echo Set userland-proxy to false...
-cat <<EOF > /etc/docker/daemon.json &&
-{
-     "userland-proxy": false,
-     "experimental": true,
-     "log-driver": "json-file",
-     "log-opts": {
-        "max-size": "10m",
-        "max-file": "3"
-      }
-}
-EOF
-
-echo Restart docker...
-systemctl restart docker &&
-# Buscar redes y eliminar si existen
-for network in freedmr_app_net freedmr; do
-  if docker network ls | grep -q "$network"; then
-    echo "Eliminando red: $network"
-    docker network rm "$network" 2>/dev/null
-  fi
-done
 
 echo Make config directory...
-mkdir /etc/ADN-Systems &&
-mkdir -p /etc/ADN-Systems/acme.sh && 
 mkdir -p /etc/ADN-Systems/certs &&
 chmod -R 755 /etc/ADN-Systems &&
 
@@ -338,12 +297,9 @@ echo Get docker-compose.yml...
 cd /etc/ADN-Systems &&
 curl https://raw.githubusercontent.com/Amateur-Digital-Network/ADN-DMR-Peer-Server/develop/docker-configs/docker-compose.yml -o docker-compose.yml &&
 
-if [[ "$(uname -m)" == "arm64" || "$(uname -m)" == "aarch64" ]]; then
-sed -i "s/cpu_shares: 1024/#cpu_shares: 1024/g"  /etc/ADN-Systems/docker-compose.yml
-sed -i "s/mem_reservation: 600m/#mem_reservation: 600m/g"  /etc/ADN-Systems/docker-compose.yml
-sed -i "s/adn-server-single:latest/adn-server-single:rpi/g"  /etc/ADN-Systems/docker-compose.yml
-sed -i "s/adn-mon2-single:latest/adn-mon2-single:rpi/g"  /etc/ADN-Systems/docker-compose.yml
-sed -i "s/cpu_shares: 512/#cpu_shares: 512/g"  /etc/ADN-Systems/docker-compose.yml
+if grep -q "Raspberry Pi" /proc/device-tree/model 2>/dev/null; then
+    sed -i "s/^cpu_shares/#cpu_shares/g" /etc/ADN-Systems/docker-compose.yml
+    sed -i "s/^mem_reservation/#mem_reservation/g" /etc/ADN-Systems/docker-compose.yml
 fi
 
 chmod 755 /etc/cron.daily/lastheard

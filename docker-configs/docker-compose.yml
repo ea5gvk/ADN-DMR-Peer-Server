@@ -16,7 +16,7 @@
 #
 ###############################################################################
 
-#version: '2.4'
+version: '2.4'
 services:
 
     adn-server:
@@ -25,8 +25,8 @@ services:
         mem_reservation: 512m
          # Before enabling local mapping, download the file to the host machine: 
          # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
-        volumes:
-            - './adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg:ro'
+#        volumes:
+#            - './adn.cfg:/opt/ADN-DMR-Peer-Server/config/adn.cfg:ro'
          # Change the below to inlude ports used for your OBP(s)
         ports:
             - '62031:62031/udp'
@@ -47,10 +47,10 @@ services:
          # file config dash 1 :     docker cp monitor:/opt/FDMR-Monitor1/fdmr-mon.cfg .
          # file config dash 2 :     docker cp monitor:/opt/FDMR-Monitor2/fdmr-mon.cfg .
 #        volumes:
-#             - './fdmr-mon.cfg:/opt/FDMR-Monitor2/fdmr-mon.cfg:ro'
-#             - './logo.png:/opt/FDMR-Monitor2/html/img/logo.png:ro'
-#             - './bk.jpg:/opt/FDMR-Monitor2/html/img/bk.jpg:ro'
-#             - './favicon.ico:/opt/FDMR-Monitor2/html/img/favicon.ico:ro'
+#             - './fdmr-mon.cfg:/opt/FDMR-Monitor2/fdmr-mon.cfg'
+#             - './logo.png:/opt/FDMR-Monitor2/html/img/logo.png'
+#             - './bk.jpg:/opt/FDMR-Monitor2/html/img/bk.jpg'
+#             - './favicon.ico:/opt/FDMR-Monitor2/html/img/favicon.ico'
         ports:
             - '80:80/tcp'
             - '443:443/tcp'

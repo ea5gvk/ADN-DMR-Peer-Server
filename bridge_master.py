@@ -53,10 +53,10 @@ from twisted.protocols.basic import NetstringReceiver
 from twisted.internet import reactor, task
 from twisted.web.server import Site
 
-from spyne import Application
-from spyne.server.twisted import TwistedWebResource
-from spyne.protocol.http import HttpRpc
-from spyne.protocol.json import JsonDocument
+#from spyne import Application
+#from spyne.server.twisted import TwistedWebResource
+#from spyne.protocol.http import HttpRpc
+#from spyne.protocol.json import JsonDocument
 
 # Things we import from the main hblink module
 from hblink import HBSYSTEM, OPENBRIDGE, systems, hblink_handler, reportFactory, REPORT_OPCODES, mk_aliases, acl_check
@@ -88,7 +88,7 @@ import re
 from binascii import b2a_hex as ahex
 
 from AMI import AMI
-from API import FD_API, FD_APIUserDefinedContext
+#from API import FD_API, FD_APIUserDefinedContext
 
 # Does anybody read this stuff? There's a PEP somewhere that says I should do this.
 __author__     = 'Cortney T. Buffington, N0MJS, Forked by Simon Adlem - G7RZU'
@@ -944,13 +944,13 @@ def options_config():
                     if _options['TS2_STATIC'] == '':
                         _options['TS2_STATIC'] = False
                     if _options['TS1_STATIC']:
-                        re.sub("\s","",_options['TS1_STATIC'])
-                        if re.search("![\d\,]",_options['TS1_STATIC']):
+                        re.sub(r"\s", "", _options['TS1_STATIC'])
+                        if re.search(r"![\d,]", _options['TS1_STATIC']):
                             logger.debug('(OPTIONS) %s - TS1_STATIC contains characters other than numbers and comma, ignoring',_system)
                             continue
                     if _options['TS2_STATIC']:
-                        re.sub("\s","",_options['TS2_STATIC'])
-                        if re.search("![\d\,]",_options['TS2_STATIC']):
+                        re.sub(r"\s", "", _options['TS2_STATIC'])
+                        if re.search(r"![\d,]", _options['TS2_STATIC']):
                             logger.debug('(OPTIONS) %s - TS2_STATIC contains characters other than numbers and comma, ignoring',_system)
                             continue
                     if isinstance(_options['DEFAULT_REFLECTOR'], str) and not _options['DEFAULT_REFLECTOR'].isdigit():
@@ -2860,21 +2860,21 @@ if __name__ == '__main__':
         logger.error('(KEYS) Cannot load keys: %s',e)
 
     #Initialize API
-    if CONFIG['GLOBAL']['ENABLE_API']:
-        api = config_API(CONFIG,BRIDGES)
-    else:
-        api = False
-    if api:
-        logger.info('(API) API running')
-        if 'SYSTEM_API_KEY' not in keys or not keys['SYSTEM_API_KEY']:
-            CONFIG['GLOBAL']['SYSTEM_API_KEY'] = secrets.token_hex(16)
-            keys['SYSTEM_API_KEY'] = CONFIG['GLOBAL']['SYSTEM_API_KEY']
-            logger.info('(API) Random system API Key generated: %s',CONFIG['GLOBAL']['SYSTEM_API_KEY'])
-        else:
-            CONFIG['GLOBAL']['SYSTEM_API_KEY'] = keys['SYSTEM_API_KEY']
-            logger.info('(API) System API Key loaded from system key store')
-    else:
-        logger.info('(API) API not started')
+#    if CONFIG['GLOBAL']['ENABLE_API']:
+#        api = config_API(CONFIG,BRIDGES)
+#    else:
+#        api = False
+#    if api:
+#        logger.info('(API) API running')
+#        if 'SYSTEM_API_KEY' not in keys or not keys['SYSTEM_API_KEY']:
+#            CONFIG['GLOBAL']['SYSTEM_API_KEY'] = secrets.token_hex(16)
+#            keys['SYSTEM_API_KEY'] = CONFIG['GLOBAL']['SYSTEM_API_KEY']
+#            logger.info('(API) Random system API Key generated: %s',CONFIG['GLOBAL']['SYSTEM_API_KEY'])
+#        else:
+#            CONFIG['GLOBAL']['SYSTEM_API_KEY'] = keys['SYSTEM_API_KEY']
+#            logger.info('(API) System API Key loaded from system key store')
+#    else:
+#        logger.info('(API) API not started')
 
     # Initialize the rule timer -- this if for user activated stuff
     rule_timer_task = task.LoopingCall(rule_timer_loop)

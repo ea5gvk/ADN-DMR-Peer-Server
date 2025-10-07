@@ -23,6 +23,9 @@ services:
         container_name: adn-server
         cpu_shares: 1024
         mem_reservation: 512m
+        environment:
+        # The AUTO_RESTART function restarts the server and forces file downloads every 24 hours.
+            - AUTO_RESTART=True
          # Before enabling local mapping, download the file to the host machine: 
          # docker cp adn-server:/opt/ADN-DMR-Peer-Server/config/adn.cfg .
         volumes:

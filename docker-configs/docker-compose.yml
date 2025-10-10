@@ -50,10 +50,17 @@ services:
          # file config dash 1 :     docker cp monitor:/opt/FDMR-Monitor1/fdmr-mon.cfg .
          # file config dash 2 :     docker cp monitor:/opt/FDMR-Monitor2/fdmr-mon.cfg .
 #        volumes:
-#             - './fdmr-mon.cfg:/opt/FDMR-Monitor2/fdmr-mon.cfg'
+              # Dash1
+#             - './logo.png:/opt/FDMR-Monitor1/html/img/logo.png'
+#             - './favicon.ico:/opt/FDMR-Monitor1/html/img/favicon.ico'
+              # Dash2
 #             - './logo.png:/opt/FDMR-Monitor2/html/img/logo.png'
 #             - './bk.jpg:/opt/FDMR-Monitor2/html/img/bk.jpg'
 #             - './favicon.ico:/opt/FDMR-Monitor2/html/img/favicon.ico'
+              # Dash3
+#             - './logo.png:/opt/adn-dashboard/html/img/banner_SAMPLE.png'
+#             - './bk.jpg:/opt/adn-dashboard/html/img/background_SAMPLE.jpg'
+#             - './favicon.ico:/opt/adn-dashboard/html/img/favicon_SAMPLE.ico'
         ports:
             - '80:80/tcp'
             - '443:443/tcp'
@@ -61,8 +68,8 @@ services:
         environment:
           # For info TZ list:   https://gist.github.com/alejzeis/ad5827eb14b5c22109ba652a1a267af5#file-timezone-mappings-csv
             - TZ=America/Panama
-          # Select DASHBOARD Style:   1 to OA4DOA , dash 2 to CS8ABG
-            - DASHBOARD=2
+          # Select DASHBOARD Style: 1 to OA4DOA, 2 to CS8ABG, 3 to CS8ABG with Map
+            - DASHBOARD=3
           # To enable SSL, enter the dashboard's DNS and your email account.
             - USE_SSL=False
             - DNS_URL=

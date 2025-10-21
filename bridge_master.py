@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #
 ###############################################################################
+# Copyright (C) 2025 Esteban Mackay, HP3ICC <setcom40@gmail.com> 
 # Copyright (C) 2025 Bruno Farias, CS8ABG <cs8abg@gmail.com> 
 # Copyright (C) 2020 Simon Adlem, G7RZU <g7rzu@gb7fr.org.uk>  
 # Copyright (C) 2016-2019 Cortney T. Buffington, N0MJS <n0mjs@me.com>
@@ -343,45 +344,93 @@ def rule_timer_loop():
     logger.debug('(ROUTER) routerHBP Rule timer loop started')
     _now = time()
     _remove_bridges = deque()
+    
+    # Mantener registro de bridges dinámicos activos por sistema
+    _active_dynamic_bridges = {}
+    
     for _bridge in BRIDGES:
         _bridge_used = False
         for _system in BRIDGES[_bridge]:
-            if _system['TO_TYPE'] == 'ON':
-                if _system['ACTIVE'] == True:
-                    _bridge_used = True
-                    if _system['TIMER'] < _now:
-                        _system['ACTIVE'] = False
-                        logger.info('(ROUTER) Conference Bridge TIMEOUT: DEACTIVATE System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
-                        if _bridge[0:1] == '#':
-                            reactor.callInThread(disconnectedVoice,_system['SYSTEM'])
-                    else:
-                        timeout_in = _system['TIMER'] - _now
+            _system_config = CONFIG['SYSTEMS'][_system['SYSTEM']]
+            _is_single_mode = _system_config.get('SINGLE_MODE', False)
+            
+            # Si SINGLE_MODE está DESACTIVADO y es bridge dinámico, usar timer infinito
+            _is_dynamic_bridge = _bridge[0:1] != '#' and _system['TO_TYPE'] != 'STAT'
+            
+            if not _is_single_mode and _is_dynamic_bridge and _system['SYSTEM'][0:3] != 'OBP':
+                # SINGLE MODE DESACTIVADO - Timer infinito para bridges dinámicos
+                if _system['TO_TYPE'] == 'ON':
+                    if _system['ACTIVE'] == True:
                         _bridge_used = True
-                        logger.info('(ROUTER) Conference Bridge ACTIVE (ON timer running): System: %s Bridge: %s, TS: %s, TGID: %s, Timeout in: %.2fs,', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']),  timeout_in)
-                elif _system['ACTIVE'] == False:
-                    logger.debug('(ROUTER) Conference Bridge INACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
-            elif _system['TO_TYPE'] == 'OFF':
-                if _system['ACTIVE'] == False:
-                    if _system['TIMER'] < _now:
+                        # Registrar bridge dinámico activo
+                        if _system['SYSTEM'] not in _active_dynamic_bridges:
+                            _active_dynamic_bridges[_system['SYSTEM']] = []
+                        _active_dynamic_bridges[_system['SYSTEM']].append((_bridge, _system))
+                        logger.debug('(ROUTER) Conference Bridge ACTIVE (INFINITE TIMER): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                    else:
+                        logger.debug('(ROUTER) Conference Bridge INACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                elif _system['TO_TYPE'] == 'OFF':
+                    if _system['ACTIVE'] == False:
+                        # Activar inmediatamente sin timer
                         _system['ACTIVE'] = True
                         _bridge_used = True 
-                        logger.info('(ROUTER) Conference Bridge TIMEOUT: ACTIVATE System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        logger.info('(ROUTER) Conference Bridge ACTIVATED (NO TIMEOUT): System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
                     else:
-                        timeout_in = _system['TIMER'] - _now
                         _bridge_used = True
-                        logger.info('(ROUTER) Conference Bridge INACTIVE (OFF timer running): System: %s Bridge: %s, TS: %s, TGID: %s, Timeout in: %.2fs,', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']),  timeout_in)
-                elif _system['ACTIVE'] == True:
-                    _bridge_used = True
-                    logger.debug('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        logger.debug('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
             else:
-                if _system['SYSTEM'][0:3] != 'OBP':
-                    _bridge_used = True
-                elif _system['SYSTEM'][0:3] == 'OBP' and _system['TO_TYPE'] == 'STAT':
-                    _bridge_used = True
-                logger.debug('(ROUTER) Conference Bridge NO ACTION: System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                # COMPORTAMIENTO ORIGINAL (SINGLE MODE ACTIVADO o bridges estáticos)
+                if _system['TO_TYPE'] == 'ON':
+                    if _system['ACTIVE'] == True:
+                        _bridge_used = True
+                        if _system['TIMER'] < _now:
+                            _system['ACTIVE'] = False
+                            logger.info('(ROUTER) Conference Bridge TIMEOUT: DEACTIVATE System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                            if _bridge[0:1] == '#':
+                                reactor.callInThread(disconnectedVoice,_system['SYSTEM'])
+                        else:
+                            timeout_in = _system['TIMER'] - _now
+                            _bridge_used = True
+                            logger.info('(ROUTER) Conference Bridge ACTIVE (ON timer running): System: %s Bridge: %s, TS: %s, TGID: %s, Timeout in: %.2fs,', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']),  timeout_in)
+                    elif _system['ACTIVE'] == False:
+                        logger.debug('(ROUTER) Conference Bridge INACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                elif _system['TO_TYPE'] == 'OFF':
+                    if _system['ACTIVE'] == False:
+                        if _system['TIMER'] < _now:
+                            _system['ACTIVE'] = True
+                            _bridge_used = True 
+                            logger.info('(ROUTER) Conference Bridge TIMEOUT: ACTIVATE System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        else:
+                            timeout_in = _system['TIMER'] - _now
+                            _bridge_used = True
+                            logger.info('(ROUTER) Conference Bridge INACTIVE (OFF timer running): System: %s Bridge: %s, TS: %s, TGID: %s, Timeout in: %.2fs,', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']),  timeout_in)
+                    elif _system['ACTIVE'] == True:
+                        _bridge_used = True
+                        logger.debug('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                else:
+                    if _system['SYSTEM'][0:3] != 'OBP':
+                        _bridge_used = True
+                    elif _system['SYSTEM'][0:3] == 'OBP' and _system['TO_TYPE'] == 'STAT':
+                        _bridge_used = True
+                    logger.debug('(ROUTER) Conference Bridge NO ACTION: System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
                 
         if _bridge_used == False:
             _remove_bridges.append(_bridge)
+    
+    # Desactivar bridges dinámicos adicionales (mantener solo el más reciente por sistema)
+    for system_name, active_bridges in _active_dynamic_bridges.items():
+        if len(active_bridges) > 1:
+            # Ordenar por tiempo de activación (el más reciente primero)
+            active_bridges.sort(key=lambda x: BRIDGES[x[0]][BRIDGES[x[0]].index(x[1])]['TIMER'], reverse=True)
+            
+            # Mantener solo el primero (más reciente)
+            for bridge_name, bridge_system in active_bridges[1:]:
+                for sys_bridge in BRIDGES[bridge_name]:
+                    if sys_bridge == bridge_system:
+                        sys_bridge['ACTIVE'] = False
+                        logger.info('(ROUTER) Deactivating additional dynamic bridge: System: %s, Bridge: %s, TS: %s, TGID: %s', 
+                                   sys_bridge['SYSTEM'], bridge_name, sys_bridge['TS'], int_id(sys_bridge['TGID']))
+                        break
                 
     for _bridgerem in _remove_bridges:
         del BRIDGES[_bridgerem]
@@ -2518,19 +2567,17 @@ class routerHBP(HBSYSTEM):
                             # TGID matches an DE-ACTIVATION trigger
                             #Single TG mode
                             if (CONFIG['SYSTEMS'][self._system]['MODE'] == 'MASTER' and CONFIG['SYSTEMS'][self._system]['SINGLE_MODE']) == True:
-                                if (_dst_id in _system['OFF']  or _dst_id in _system['RESET'] or _dst_id != _system['TGID']) and _slot == _system['TS']:
-                                #if (_dst_id in _system['OFF']  or _dst_id in _system['RESET']) and _slot == _system['TS']:
+                                if (_dst_id in _system['OFF'] or _dst_id in _system['RESET'] or _dst_id == bytes_3(4000) or _dst_id != _system['TGID']) and _slot == _system['TS']:
                                     # Set the matching rule as ACTIVE
                                     #Single TG mode
-                                    if _dst_id in _system['OFF'] or _dst_id != _system['TGID']:
-                                    #if _dst_id in _system['OFF']:
+                                    if _dst_id in _system['OFF'] or _dst_id != _system['TGID'] or _dst_id == bytes_3(4000):
                                         if _system['ACTIVE'] == True:
                                             _system['ACTIVE'] = False
-                                            logger.info('(%s) [5] Bridge: %s, connection changed to state: %s', self._system, _bridge, _system['ACTIVE'])
+                                            logger.info('(%s) [5] Bridge: %s, connection changed to state: %s (TG 4000 forced deactivation)', self._system, _bridge, _system['ACTIVE'])
                                             # Cancel the timer if we've enabled an "ON" type timeout
                                             if _system['TO_TYPE'] == 'ON':
                                                 _system['TIMER'] = pkt_time
-                                                logger.info('(%s) [6] Bridge: %s set to ON with an "OFF" timer rule: timeout timer cancelled', self._system, _bridge)
+                                                logger.info('(%s) [6] Bridge: %s set to "OFF" with an on timer rule: timeout timer cancelled', self._system, _bridge)
                                     # Reset the timer for the rule
                                     if _system['ACTIVE'] == False and _system['TO_TYPE'] == 'OFF':
                                         _system['TIMER'] = pkt_time + _system['TIMEOUT']
@@ -2540,27 +2587,51 @@ class routerHBP(HBSYSTEM):
                                         _system['TIMER'] = pkt_time
                                         logger.info('(%s) [8] Bridge: %s set to ON with and "OFF" timer rule: timeout timer cancelled', self._system, _bridge)
                             else:
+                                # NUEVO COMPORTAMIENTO: SINGLE_MODE=False pero con gestión de bridge único
+                                # Solo desactivar si es TG 4000 o un nuevo TG dinámico (no estático)
                                 
-                                if (_dst_id in _system['OFF']  or _dst_id in _system['RESET']) and _slot == _system['TS']:
+                                # Verificar si el TGID actual es estático
+                                is_static_tg = False
+                                if CONFIG['SYSTEMS'][self._system]['TS1_STATIC'] and _slot == 1:
+                                    static_tgs = [int(tg) for tg in CONFIG['SYSTEMS'][self._system]['TS1_STATIC'].split(',') if tg.strip()]
+                                    if int_id(_dst_id) in static_tgs:
+                                        is_static_tg = True
+                                elif CONFIG['SYSTEMS'][self._system]['TS2_STATIC'] and _slot == 2:
+                                    static_tgs = [int(tg) for tg in CONFIG['SYSTEMS'][self._system]['TS2_STATIC'].split(',') if tg.strip()]
+                                    if int_id(_dst_id) in static_tgs:
+                                        is_static_tg = True
+                                
+                                # Verificar si es un reflector (bridge que empieza con #)
+                                is_reflector = _bridge[0:1] == '#'
+                                
+                                # Desactivar solo si es TG 4000 o un nuevo TG dinámico (no estático ni reflector)
+                                if (_dst_id in _system['OFF'] or _dst_id in _system['RESET'] or _dst_id == bytes_3(4000) or 
+                                    (_dst_id != _system['TGID'] and not is_static_tg and not is_reflector)) and _slot == _system['TS']:
+                                    
                                     # Set the matching rule as ACTIVE
-                                    if _dst_id in _system['OFF']:
+                                    if _dst_id in _system['OFF'] or _dst_id == bytes_3(4000) or (_dst_id != _system['TGID'] and not is_static_tg and not is_reflector):
                                         if _system['ACTIVE'] == True:
                                             _system['ACTIVE'] = False
-                                            logger.info('(%s) [9] Bridge: %s, connection changed to state: %s', self._system, _bridge, _system['ACTIVE'])
+                                            if _dst_id == bytes_3(4000):
+                                                logger.info('(%s) [5b] Bridge: %s, connection changed to state: %s (TG 4000 forced deactivation)', self._system, _bridge, _system['ACTIVE'])
+                                            elif is_static_tg:
+                                                logger.info('(%s) [5b] Bridge: %s, connection changed to state: %s (Static TG %s activated)', self._system, _bridge, _system['ACTIVE'], int_id(_dst_id))
+                                            else:
+                                                logger.info('(%s) [5b] Bridge: %s, connection changed to state: %s (New dynamic TG %s activated)', self._system, _bridge, _system['ACTIVE'], int_id(_dst_id))
+                                            
                                             # Cancel the timer if we've enabled an "ON" type timeout
-                                        if _system['TO_TYPE'] == 'ON':
-                                            _system['TIMER'] = pkt_time
-                                            logger.info('(%s) [10] Bridge: %s set to ON with and "OFF" timer rule: timeout timer cancelled', self._system, _bridge)
+                                            if _system['TO_TYPE'] == 'ON':
+                                                _system['TIMER'] = pkt_time
+                                                logger.info('(%s) [6b] Bridge: %s set to "OFF" with an on timer rule: timeout timer cancelled', self._system, _bridge)
                                     # Reset the timer for the rule
                                     if _system['ACTIVE'] == False and _system['TO_TYPE'] == 'OFF':
                                         _system['TIMER'] = pkt_time + _system['TIMEOUT']
-                                        logger.info('(%s) [11] Bridge: %s, timeout timer reset to: %s', self._system, _bridge, _system['TIMER'] - pkt_time)
+                                        logger.info('(%s) [7b] Bridge: %s, timeout timer reset to: %s', self._system, _bridge, _system['TIMER'] - pkt_time)
                                     # Cancel the timer if we've enabled an "ON" type timeout
                                     if _system['ACTIVE'] == True and _system['TO_TYPE'] == 'ON' and _dst_id in _system['OFF']:
                                         _system['TIMER'] = pkt_time
-                                        logger.info('(%s) [12] Bridge: %s set to ON with and "OFF" timer rule: timeout timer cancelled', self._system, _bridge)
-
-            #
+                                        logger.info('(%s) [8b] Bridge: %s set to ON with and "OFF" timer rule: timeout timer cancelled', self._system, _bridge)
+                                        #
             # END IN-BAND SIGNALLING
             #
 
@@ -2889,7 +2960,7 @@ if __name__ == '__main__':
     # Ident
     #This runs in a thread so as not to block the reactor
     ident_task = task.LoopingCall(threadIdent)
-    identa = ident_task.start(914)
+    identa = ident_task.start(3600)
     identa.addErrback(loopingErrHandle)
     
     #Alias reloader

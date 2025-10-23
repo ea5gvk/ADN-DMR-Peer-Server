@@ -339,6 +339,18 @@ def remove_bridge_system(system):
             
     BRIDGES.update(_bridgestemp)
 
+def deactivate_all_dynamic_bridges(system_name):
+    """Desactiva todos los bridges dinámicos (no estáticos, no reflectores) de un sistema."""
+    for _bridge in BRIDGES:
+        if _bridge[0:1] == '#':  # Saltar reflectores
+            continue
+        for _sys_entry in BRIDGES[_bridge]:
+            if _sys_entry['SYSTEM'] == system_name and _sys_entry['TO_TYPE'] != 'STAT':
+                if _sys_entry['ACTIVE']:
+                    _sys_entry['ACTIVE'] = False
+                    logger.info('(ROUTER) Deactivated dynamic bridge due to TG/ID 4000: System: %s, Bridge: %s, TS: %s, TGID: %s',
+                               system_name, _bridge, _sys_entry['TS'], int_id(_sys_entry['TGID']))
+                    
 # Run this every minute for rule timer updates
 def rule_timer_loop():
     logger.debug('(ROUTER) routerHBP Rule timer loop started')
@@ -416,21 +428,6 @@ def rule_timer_loop():
                 
         if _bridge_used == False:
             _remove_bridges.append(_bridge)
-    
-    # Desactivar bridges dinámicos adicionales (mantener solo el más reciente por sistema)
-    for system_name, active_bridges in _active_dynamic_bridges.items():
-        if len(active_bridges) > 1:
-            # Ordenar por tiempo de activación (el más reciente primero)
-            active_bridges.sort(key=lambda x: BRIDGES[x[0]][BRIDGES[x[0]].index(x[1])]['TIMER'], reverse=True)
-            
-            # Mantener solo el primero (más reciente)
-            for bridge_name, bridge_system in active_bridges[1:]:
-                for sys_bridge in BRIDGES[bridge_name]:
-                    if sys_bridge == bridge_system:
-                        sys_bridge['ACTIVE'] = False
-                        logger.info('(ROUTER) Deactivating additional dynamic bridge: System: %s, Bridge: %s, TS: %s, TGID: %s', 
-                                   sys_bridge['SYSTEM'], bridge_name, sys_bridge['TS'], int_id(sys_bridge['TGID']))
-                        break
                 
     for _bridgerem in _remove_bridges:
         del BRIDGES[_bridgerem]
@@ -2278,6 +2275,13 @@ class routerHBP(HBSYSTEM):
                                 else:
                                     logger.debug('(%s) UNIT Data not bridged to HBP on slot %s - target busy: %s DST_ID: %s',self._system,_d_slot,_d_system,_int_dst_id)
 
+        # Handle private call to ID 4000 as global dynamic bridge reset
+        if _call_type == 'unit' and _int_dst_id == 4000:
+            logger.info('(%s) Private call to ID 4000 received on TS %s - deactivating all dynamic bridges', self._system, _slot)
+            deactivate_all_dynamic_bridges(self._system)
+            # Opcional: no procesar más reglas para este paquete
+            return
+
         #Handle Private Calls                       
         if _call_type == 'unit' and len(str(_int_dst_id)) == 7:
             self.pvt_call_received(_peer_id, _rf_src, _dst_id, _seq, _slot, _frame_type, _dtype_vseq, _stream_id, _data)
@@ -2366,6 +2370,10 @@ class routerHBP(HBSYSTEM):
         
         #Handle group calls
         if _call_type == 'group' or _call_type == 'vcsbk':
+            if _int_dst_id == 4000:
+                logger.info('(%s) Group call to TG 4000 received on TS %s - deactivating all dynamic bridges', self._system, _slot)
+                deactivate_all_dynamic_bridges(self._system)
+                return
 
             # Is this a new call stream?
             if (_stream_id != self.STATUS[_slot]['RX_STREAM_ID']):
@@ -2605,8 +2613,7 @@ class routerHBP(HBSYSTEM):
                                 is_reflector = _bridge[0:1] == '#'
                                 
                                 # Desactivar solo si es TG 4000 o un nuevo TG dinámico (no estático ni reflector)
-                                if (_dst_id in _system['OFF'] or _dst_id in _system['RESET'] or _dst_id == bytes_3(4000) or 
-                                    (_dst_id != _system['TGID'] and not is_static_tg and not is_reflector)) and _slot == _system['TS']:
+                                if (_dst_id == bytes_3(4000)) and _slot == _system['TS']:
                                     
                                     # Set the matching rule as ACTIVE
                                     if _dst_id in _system['OFF'] or _dst_id == bytes_3(4000) or (_dst_id != _system['TGID'] and not is_static_tg and not is_reflector):

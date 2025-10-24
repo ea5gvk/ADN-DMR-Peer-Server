@@ -211,12 +211,12 @@ def make_bridges(_rules):
     
     return _rules
 
-#Make a single bridge - used for on-the-fly UA bridges
+### MODIFIED: Updated to handle all special TGIDs (9990-9999) with a 1-minute timeout
 def make_single_bridge(_tgid,_sourcesystem,_slot,_tmout):
     _tgid_s = str(int_id(_tgid))
-    #Always a 1 min timeout for Echo
-    if _tgid_s == '9990':
-        _tmout = 1
+    #Always a 1 min timeout for Echo and special TGIDs
+    if _tgid_s in ['9990', '9991', '9992', '9993', '9994', '9995', '9996', '9997', '9998', '9999']:
+        _tmout = 1/6
     BRIDGES[_tgid_s] = []
     for _system in CONFIG['SYSTEMS']:
         if _system[0:3] != 'OBP':
@@ -236,6 +236,8 @@ def make_single_bridge(_tgid,_sourcesystem,_slot,_tmout):
         if _system[0:3] == 'OBP' and (int_id(_tgid) >= 79 and (int_id(_tgid) < 9990 or int_id(_tgid) > 9999)):
             BRIDGES[_tgid_s].append({'SYSTEM': _system, 'TS': 1, 'TGID': _tgid,'ACTIVE': True,'TIMEOUT': '','TO_TYPE': 'NONE','OFF': [],'ON': [],'RESET': [], 'TIMER': time()})
         
+### END MODIFIED ###
+
 #Make static bridge - used for on-the-fly relay bridges
 def make_stat_bridge(_tgid):
     _tgid_s = str(int_id(_tgid))
@@ -305,12 +307,13 @@ def reset_all_reflector_system(_tmout,system):
                         bridgetemp.append(bridgesystem)
                     BRIDGES[bridge] = bridgetemp
             
+### MODIFIED: Updated to handle all special TGIDs (9990-9999) with a 1-minute timeout
 def make_single_reflector(_tgid,_tmout,_sourcesystem):
     _tgid_s = str(int_id(_tgid))
     _bridge = ''.join(['#',_tgid_s])
-    #1 min timeout for echo
-    if _tgid_s == '9990':
-        _tmout = 1
+    #1 min timeout for echo and special TGIDs
+    if _tgid_s in ['9990', '9991', '9992', '9993', '9994', '9995', '9996', '9997', '9998', '9999']:
+        _tmout = 1/6
     BRIDGES[_bridge] = []
     for _system in CONFIG['SYSTEMS']:
         #if _system[0:3] != 'OBP':
@@ -323,6 +326,8 @@ def make_single_reflector(_tgid,_tmout,_sourcesystem):
         if _system[0:3] == 'OBP' and (int_id(_tgid) >= 79 and (int_id(_tgid) < 9990 or int_id(_tgid) > 9999)):
             BRIDGES[_bridge].append({'SYSTEM': _system, 'TS': 1, 'TGID': _tgid,'ACTIVE': True,'TIMEOUT': '','TO_TYPE': 'NONE','OFF': [],'ON': [],'RESET': [], 'TIMER': time()})
         
+### END MODIFIED ###
+
 def remove_bridge_system(system):
     _bridgestemp = {}
     _bridgetemp = {}
@@ -351,7 +356,7 @@ def deactivate_all_dynamic_bridges(system_name):
                     logger.info('(ROUTER) Deactivated dynamic bridge due to TG/ID 4000: System: %s, Bridge: %s, TS: %s, TGID: %s',
                                system_name, _bridge, _sys_entry['TS'], int_id(_sys_entry['TGID']))
                     
-# Run this every minute for rule timer updates
+### MODIFIED: Core logic updated to handle special TGIDs (9990-9999) correctly with SINGLE_MODE
 def rule_timer_loop():
     logger.debug('(ROUTER) routerHBP Rule timer loop started')
     _now = time()
@@ -362,6 +367,18 @@ def rule_timer_loop():
     
     for _bridge in BRIDGES:
         _bridge_used = False
+        
+        ### MODIFIED: Detect special TGIDs (9990-9999) to exclude them from infinite timer logic
+        _is_special_tg = False
+        if _bridge[0:1] != '#':  # No es un reflector
+            try:
+                _bridge_int = int(_bridge)
+                if 9990 <= _bridge_int <= 9999:
+                    _is_special_tg = True
+            except ValueError:
+                pass
+        ### END MODIFIED ###
+        
         for _system in BRIDGES[_bridge]:
             _system_config = CONFIG['SYSTEMS'][_system['SYSTEM']]
             _is_single_mode = _system_config.get('SINGLE_MODE', False)
@@ -369,7 +386,9 @@ def rule_timer_loop():
             # Si SINGLE_MODE está DESACTIVADO y es bridge dinámico, usar timer infinito
             _is_dynamic_bridge = _bridge[0:1] != '#' and _system['TO_TYPE'] != 'STAT'
             
-            if not _is_single_mode and _is_dynamic_bridge and _system['SYSTEM'][0:3] != 'OBP':
+            ### MODIFIED: Added 'and not _is_special_tg' to the condition
+            if not _is_single_mode and _is_dynamic_bridge and _system['SYSTEM'][0:3] != 'OBP' and not _is_special_tg:
+            ### END MODIFIED ###
                 # SINGLE MODE DESACTIVADO - Timer infinito para bridges dinámicos
                 if _system['TO_TYPE'] == 'ON':
                     if _system['ACTIVE'] == True:
@@ -391,7 +410,7 @@ def rule_timer_loop():
                         _bridge_used = True
                         logger.debug('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
             else:
-                # COMPORTAMIENTO ORIGINAL (SINGLE MODE ACTIVADO o bridges estáticos)
+                # COMPORTAMIENTO ORIGINAL (SINGLE MODE ACTIVADO o bridges estáticos o TGIDs especiales)
                 if _system['TO_TYPE'] == 'ON':
                     if _system['ACTIVE'] == True:
                         _bridge_used = True
@@ -435,6 +454,8 @@ def rule_timer_loop():
 
     if CONFIG['REPORTS']['REPORT']:
         report_server.send_clients(b'bridge updated')
+        
+### END MODIFIED ###
 
 def statTrimmer():
     logger.debug('(ROUTER) STAT trimmer loop started')
@@ -824,7 +845,6 @@ def ident():
                 for character in _systemcs:
                     _say.append(words[_lang][character])
                     _say.append(words[_lang]['silence'])
-                _say.append(words[_lang]['silence'])
                 _say.append(words[_lang]['silence'])
                 _say.append(words[_lang]['silence'])
                 _say.append(words[_lang]['silence'])
@@ -1372,6 +1392,7 @@ class routerOBP(OPENBRIDGE):
                     'lastData': False,
                     'RX_PEER': _peer_id,
                     'packets': 0,
+                    'loss': 0,
                     'crcs': set()
                 }
             
@@ -2506,22 +2527,31 @@ class routerHBP(HBSYSTEM):
             #Save this packet
             self.STATUS[_slot]['lastData'] = _data
             
+            ### MODIFIED: Prioritize routing for the TGID that just created a bridge
             _sysIgnore = deque()
-            for _bridge in BRIDGES:
-                #if _bridge[0:1] != '#':
-                if True:
-                    for _system in BRIDGES[_bridge]:
-                        if _system['SYSTEM'] == self._system and _system['TGID'] == _dst_id and _system['TS'] == _slot and _system['ACTIVE'] == True:
-                            _sysIgnore = self.to_target(_peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits,_bridge,_system,False,_sysIgnore,_source_server,_ber,_rssi, _source_rptr)
-                        
-                            #Send to reflector or TG too, if it exists
-                            if _bridge[0:1] == '#':
-                                _bridge = _bridge[1:]
-                            else:
-                                _bridge = ''.join(['#',_bridge])
-                            if _bridge in BRIDGES:
-                                _sysIgnore = self.to_target(_peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits,_bridge,_system,False,_sysIgnore,_source_server,_ber,_rssi,_source_rptr)
+            _current_bridge_key = str(int_id(_dst_id))
 
+            # First, explicitly route for the current packet's TGID.
+            # This ensures that if a bridge was just created for this packet, it gets processed immediately.
+            if _current_bridge_key in BRIDGES:
+                for _system in BRIDGES[_current_bridge_key]:
+                    if _system['SYSTEM'] == self._system and _system['TGID'] == _dst_id and _system['TS'] == _slot and _system['ACTIVE'] == True:
+                        _sysIgnore = self.to_target(_peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits, _current_bridge_key, _system, False, _sysIgnore, _source_server, _ber, _rssi, _source_rptr)
+
+                        # Also check for a corresponding reflector bridge (e.g., #9990)
+                        _reflector_bridge_key = ''.join(['#', _current_bridge_key])
+                        if _reflector_bridge_key in BRIDGES:
+                            _sysIgnore = self.to_target(_peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits, _reflector_bridge_key, _system, False, _sysIgnore, _source_server, _ber, _rssi, _source_rptr)
+
+            # Now, run the general routing loop for all other bridges to handle cross-connections.
+            # We skip the one we just processed to avoid duplicate work.
+            for _bridge in BRIDGES:
+                if _bridge == _current_bridge_key:
+                    continue
+                for _system in BRIDGES[_bridge]:
+                    if _system['SYSTEM'] == self._system and _system['TGID'] == _dst_id and _system['TS'] == _slot and _system['ACTIVE'] == True:
+                        _sysIgnore = self.to_target(_peer_id, _rf_src, _dst_id, _seq, _slot, _call_type, _frame_type, _dtype_vseq, _stream_id, _data, pkt_time, dmrpkt, _bits, _bridge, _system, False, _sysIgnore, _source_server, _ber, _rssi, _source_rptr)
+            ### END MODIFIED ###
             # Final actions - Is this a voice terminator?
             if (_frame_type == HBPF_DATA_SYNC) and (_dtype_vseq == HBPF_SLT_VTERM) and (self.STATUS[_slot]['RX_TYPE'] != HBPF_SLT_VTERM):
                 packet_rate = 0

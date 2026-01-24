@@ -65,8 +65,57 @@ from urllib.request import urlopen
 
 import shutil
 import csv
+import json
+import os
 
 import math
+
+from password_crypto import decrypt_password
+
+USER_PASSWORDS = {}
+USER_PASSWORDS_FILE = 'data/user_passwords.json'
+USER_PASSWORDS_LAST_LOAD = 0
+USER_PASSWORDS_RELOAD_INTERVAL = 10
+
+def load_user_passwords():
+    global USER_PASSWORDS, USER_PASSWORDS_LAST_LOAD
+    current_time = time()
+    if current_time - USER_PASSWORDS_LAST_LOAD < USER_PASSWORDS_RELOAD_INTERVAL:
+        return USER_PASSWORDS
+    try:
+        if os.path.exists(USER_PASSWORDS_FILE):
+            with open(USER_PASSWORDS_FILE, 'r') as f:
+                data = json.load(f)
+                encrypted_passwords = data.get('passwords', {})
+                USER_PASSWORDS = {}
+                for radio_id, pwd in encrypted_passwords.items():
+                    USER_PASSWORDS[radio_id] = decrypt_password(pwd)
+                logger.debug('(AUTH) Loaded %d individual passwords from %s', len(USER_PASSWORDS), USER_PASSWORDS_FILE)
+        else:
+            USER_PASSWORDS = {}
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning('(AUTH) Could not load user passwords: %s', e)
+        USER_PASSWORDS = {}
+    USER_PASSWORDS_LAST_LOAD = current_time
+    return USER_PASSWORDS
+
+def get_user_password(radio_id):
+    passwords = load_user_passwords()
+    radio_id_str = str(radio_id)
+    
+    if not radio_id_str.isdigit():
+        return None
+    
+    if radio_id_str in passwords:
+        return passwords[radio_id_str].encode('utf-8')
+    
+    if len(radio_id_str) == 9:
+        base_id = radio_id_str[:7]
+        if base_id in passwords:
+            logger.debug('(AUTH) Radio ID %s using base ID %s password', radio_id_str, base_id)
+            return passwords[base_id].encode('utf-8')
+    
+    return None
 
 
 logging.TRACE = 5
@@ -972,20 +1021,33 @@ class HBSYSTEM(DatagramProtocol):
                 _this_peer['LAST_PING'] = time()
                 _sent_hash = _data[8:]
                 _salt_str = bytes_4(_this_peer['SALT'])
-                if self._CONFIG['GLOBAL']['ALLOW_NULL_PASSPHRASE'] and len(self._config['PASSPHRASE']) == 0:
-                    _this_peer['CONNECTION'] = 'WAITING_CONFIG'
-                    self.send_peer(_peer_id, b''.join([RPTACK, _peer_id]))
-                    logger.info('(%s) Peer %s has completed the login exchange successfully', self._system, _this_peer['RADIO_ID'])
-                else:
+                _radio_id_int = int_id(_peer_id)
+                _individual_password = get_user_password(_radio_id_int)
+                
+                if _individual_password is not None:
+                    _calc_hash = bhex(sha256(_salt_str + _individual_password).hexdigest())
+                    if _sent_hash == _calc_hash:
+                        _this_peer['CONNECTION'] = 'WAITING_CONFIG'
+                        self.send_peer(_peer_id, b''.join([RPTACK, _peer_id]))
+                        logger.info('(%s) Peer %s has completed the login exchange successfully (individual password)', self._system, _this_peer['RADIO_ID'])
+                    else:
+                        logger.warning('(%s) Peer %s has FAILED the login exchange (wrong individual password)', self._system, _this_peer['RADIO_ID'])
+                        self.transport.write(b''.join([MSTNAK, _peer_id]), _sockaddr)
+                        del self._peers[_peer_id]
+                elif len(self._config['PASSPHRASE']) > 0:
                     _calc_hash = bhex(sha256(_salt_str+self._config['PASSPHRASE']).hexdigest())                
                     if _sent_hash == _calc_hash:
                         _this_peer['CONNECTION'] = 'WAITING_CONFIG'
                         self.send_peer(_peer_id, b''.join([RPTACK, _peer_id]))
-                        logger.info('(%s) Peer %s has completed the login exchange successfully', self._system, _this_peer['RADIO_ID'])
+                        logger.info('(%s) Peer %s has completed the login exchange successfully (global passphrase)', self._system, _this_peer['RADIO_ID'])
                     else:
-                        logger.info('(%s) Peer %s has FAILED the login exchange successfully', self._system, _this_peer['RADIO_ID'])
+                        logger.warning('(%s) Peer %s has FAILED the login exchange (wrong global passphrase)', self._system, _this_peer['RADIO_ID'])
                         self.transport.write(b''.join([MSTNAK, _peer_id]), _sockaddr)
                         del self._peers[_peer_id]
+                else:
+                    logger.warning('(%s) Peer %s has FAILED - no individual password configured and no global passphrase', self._system, _this_peer['RADIO_ID'])
+                    self.transport.write(b''.join([MSTNAK, _peer_id]), _sockaddr)
+                    del self._peers[_peer_id]
             else:
                 self.transport.write(b''.join([MSTNAK, _peer_id]), _sockaddr)
                 logger.info('(%s) Login challenge from Radio ID that has not logged in: %s', self._system, int_id(_peer_id))

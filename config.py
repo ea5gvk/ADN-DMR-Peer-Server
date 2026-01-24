@@ -69,7 +69,7 @@ def process_acls(_config):
 # PROCESSED: (False, set([(1, 5), (3120124, 3120124), (3120101, 3120101)]))
 def acl_build(_acl, _max):
     if not _acl:
-        return(True, set((const.ID_MIN, _max)))
+        return(True, [(const.ID_MIN, _max)])
 
     acl = [] #set()
     sections = _acl.split(':')
@@ -143,8 +143,12 @@ def build_config(_config_file):
                     'TG1_ACL': config.get(section, 'TGID_TS1_ACL', fallback='PERMIT:ALL'),
                     'TG2_ACL': config.get(section, 'TGID_TS2_ACL', fallback='PERMIT:ALL'),
                     'GEN_STAT_BRIDGES': config.getboolean(section, 'GEN_STAT_BRIDGES', fallback=True),
-                    'ALLOW_NULL_PASSPHRASE': config.getboolean(section, 'ALLOW_NULL_PASSPHRASE', fallback=True),
                     'ANNOUNCEMENT_LANGUAGES': config.get(section, 'ANNOUNCEMENT_LANGUAGES', fallback=''),
+                    'URL_SECURITY': config.get(section, 'URL_SECURITY', fallback=''),
+                    'PORT_SECURITY': config.get(section, 'PORT_SECURITY', fallback=''),
+                    'PASS_SECURITY': config.get(section, 'PASS_SECURITY', fallback=''),
+                    'USERS_PASS': config.get(section, 'USERS_PASS', fallback='user_passwords.json'),
+                    'HASH_ENCRYPT': config.get(section, 'HASH_ENCRYPT', fallback='encryption_key.secret'),
                     'SERVER_ID': config.getint(section, 'SERVER_ID', fallback=0).to_bytes(4, 'big'),
                     'DATA_GATEWAY': config.getboolean(section, 'DATA_GATEWAY', fallback=False),
                     'VALIDATE_SERVER_IDS': config.getboolean(section, 'VALIDATE_SERVER_IDS', fallback=True),

@@ -5,7 +5,7 @@ After=syslog.target network.target
 [Service]
 User=root
 WorkingDirectory=/opt/adn
-ExecStart=/usr/bin/python3 bridge_master.py -c ./config/adn.cfg -r ./config/rules.py
+ExecStart=/usr/bin/python3 bridge_master.py -c ./config/adn.cfg
 
 [Install]
 WantedBy=multi-user.target

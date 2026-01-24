@@ -1,0 +1,56 @@
+modules = ["python-3.12", "bash", "web"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "FreeDMR Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Password Dashboard"
+
+[[workflows.workflow]]
+name = "FreeDMR Server"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python bridge_master.py -c ./config/adn.cfg"
+
+[[workflows.workflow]]
+name = "Password Dashboard"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python dashboard.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 4321
+externalPort = 3000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[agent]
+expertMode = true
+integrations = ["github:1.0.0"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["cargo", "gitFull", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "wkhtmltopdf"]

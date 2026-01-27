@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 #
 ###############################################################################
+# Copyright (C) 2026 Joaquin Madrid Belando, EA5GVK <ea5gvk@gmail.com> 
+# Copyright (C) 2025 Esteban Mackay, HP3ICC <setcom40@gmail.com> 
+# Copyright (C) 2025 Bruno Farias, CS8ABG <cs8abg@gmail.com> 
 #   Copyright (C) 2016-2018 Cortney T. Buffington, N0MJS <n0mjs@me.com>
 #
 #   This program is free software; you can redistribute it and/or modify
@@ -37,12 +40,12 @@ from languages import languages
 
 
 # Does anybody read this stuff? There's a PEP somewhere that says I should do this.
-__author__     = 'Cortney T. Buffington, N0MJS'
-__copyright__  = '(c) Simon Adlem, G7RZU 2020-2023, Copyright (c) 2016-2018 Cortney T. Buffington, N0MJS and the K0USY Group'
-__credits__    = 'Colin Durbridge, G4EML, Steve Zingman, N4IRS; Mike Zingman, N4IRR; Jonathan Naylor, G4KLX; Hans Barthen, DL5DI; Torsten Shultze, DG1HT'
+__author__     = 'Cortney T. Buffington, N0MJS, Forked by Simon Adlem - G7RZU, Forked by Esteban Mackay HP3ICC'
+__copyright__  = 'Copyright (c) 2016-2019 Cortney T. Buffington, N0MJS and the K0USY Group, Simon Adlem G7RZU 2020-2023, Esteban Mackay, HP3ICC 2024-2026'
+__credits__    = 'Colin Durbridge, G4EML, Steve Zingman, N4IRS; Mike Zingman, N4IRR; Jonathan Naylor, G4KLX; Hans Barthen, DL5DI; Torsten Shultze, DG1HT; Jon Lee, G4TSN; Norman Williams, M6NBP, Eric Craw KF7EEL, Simon Adlem - G7RZU, Bruno Farias CS8ABG, Esteban Mackay HP3ICC, Joaquin Madrid Belando EA5GVK'
 __license__    = 'GNU GPLv3'
-__maintainer__ = 'Simon Adlem, G7RZU'
-__email__      = 'simon@gb7fr.org.uk'
+__maintainer__ = 'Esteban Mackay, HP3ICC'
+__email__      = 'setcom40@gmail.com'
 
 # Processing of ALS goes here. It's separated from the acl_build function because this
 # code is hblink config-file format specific, and acl_build is abstracted
@@ -184,15 +187,15 @@ def build_config(_config_file):
                     'PEER_FILE': config.get(section, 'PEER_FILE', fallback='peer_ids.json'),
                     'SUBSCRIBER_FILE': config.get(section, 'SUBSCRIBER_FILE', fallback='subscriber_ids.json'),
                     'TGID_FILE': config.get(section, 'TGID_FILE', fallback='talkgroup_ids.json'),
-                    'PEER_URL': config.get(section, 'PEER_URL', fallback='https://adn.systems/files/peer_ids.json'),
-                    'SUBSCRIBER_URL': config.get(section, 'SUBSCRIBER_URL', fallback='https://adn.systems/files/subscriber_ids.json'),
-                    'TGID_URL': config.get(section, 'TGID_URL', fallback='https://adn.systems/files/talkgroup_ids.json'),
+                    'PEER_URL': config.get(section, 'PEER_URL', fallback='https://servers.adn.systems/peer_ids.json'),
+                    'SUBSCRIBER_URL': config.get(section, 'SUBSCRIBER_URL', fallback='https://servers.adn.systems/subscriber_ids.json'),
+                    'TGID_URL': config.get(section, 'TGID_URL', fallback='https://servers.adn.systems/talkgroup_ids.json'),
                     'STALE_TIME': config.getint(section, 'STALE_DAYS', fallback=1) * 86400,
                     'SUB_MAP_FILE': config.get(section, 'SUB_MAP_FILE', fallback='sub_map.pkl'),
                     'LOCAL_SUBSCRIBER_FILE': config.get(section, 'LOCAL_SUBSCRIBER_FILE', fallback='local_subscribers.json'),
-                    'SERVER_ID_URL': config.get(section, 'SERVER_ID_URL', fallback='https://adn.systems/files/server_ids.tsv'),
+                    'SERVER_ID_URL': config.get(section, 'SERVER_ID_URL', fallback='https://servers.adn.systems/server_ids.tsv'),
                     'SERVER_ID_FILE': config.get(section, 'SERVER_ID_FILE', fallback='server_ids.tsv'),
-                    'CHECKSUM_URL': config.get(section, 'CHECKSUM_URL', fallback='https://adn.systems/files/file_checksums.json'),
+                    'CHECKSUM_URL': config.get(section, 'CHECKSUM_URL', fallback='https://servers.adn.systems/file_checksums.json'),
                     'CHECKSUM_FILE': config.get(section, 'CHECKSUM_FILE', fallback='file_checksums.json'),
                     'KEYS_FILE': config.get(section, 'KEYS_FILE', fallback='keys.json')
                 })
@@ -315,7 +318,7 @@ def build_config(_config_file):
                         'MAX_PEERS': config.getint(section, 'MAX_PEERS', fallback=1),
                         'IP': config.get(section, 'IP', fallback='127.0.0.1'),
                         'PORT': config.getint(section, 'PORT', fallback=56400),
-                        'PASSPHRASE': bytes(config.get(section, 'PASSPHRASE', fallback=''), 'utf-8'),
+                        'PASSPHRASE': bytes(config.get(section, 'PASSPHRASE', fallback='passw0rd'), 'utf-8'),
                         'GROUP_HANGTIME': config.getint(section, 'GROUP_HANGTIME',fallback=5),
                         'USE_ACL': config.getboolean(section, 'USE_ACL', fallback=False),
                         'REG_ACL': config.get(section, 'REG_ACL', fallback=''),

@@ -49,11 +49,17 @@ SUB_ACL: DENY:1
 TGID_TS1_ACL: PERMIT:ALL
 TGID_TS2_ACL: PERMIT:ALL
 GEN_STAT_BRIDGES: True
-ALLOW_NULL_PASSPHRASE: True
 ANNOUNCEMENT_LANGUAGES:
 SERVER_ID: 0000
 DATA_GATEWAY: False
 VALIDATE_SERVER_IDS: True
+
+# Servidor de seguridad centralizado
+URL_SECURITY: 
+PORT_SECURITY: 
+PASS_SECURITY: 
+USERS_PASS: user_passwords.json
+HASH_ENCRYPT: encryption_key.secret
 
 [REPORTS]
 REPORT: True
@@ -73,11 +79,11 @@ PATH: ./data/
 PEER_FILE: peer_ids.json
 SUBSCRIBER_FILE: subscriber_ids.json
 TGID_FILE: talkgroup_ids.json
-PEER_URL: https://adn.systems/files/peer_ids.json
-SUBSCRIBER_URL: https://adn.systems/files/subscriber_ids.json
-TGID_URL: https://adn.systems/files/talkgroup_ids.json
-SERVER_ID_URL: https://adn.systems/files/server_ids.tsv
-CHECKSUM_URL: https://adn.systems/files/file_checksums.json
+PEER_URL: https://servers.adn.systems/peer_ids.json
+SUBSCRIBER_URL: https://servers.adn.systems/subscriber_ids.json
+TGID_URL: https://servers.adn.systems/talkgroup_ids.json
+SERVER_ID_URL: https://servers.adn.systems/server_ids.tsv
+CHECKSUM_URL: https://servers.adn.systems/file_checksums.json
 LOCAL_SUBSCRIBER_FILE: subscriber_ids.json
 STALE_DAYS: 1
 SUB_MAP_FILE: sub_map.pkl
@@ -118,7 +124,7 @@ MAX_PEERS: 1
 EXPORT_AMBE: False
 IP: 
 PORT: 56400
-PASSPHRASE:
+PASSPHRASE: passw0rd
 GROUP_HANGTIME: 5
 USE_ACL: True
 REG_ACL: DENY:1
@@ -145,7 +151,7 @@ MAX_PEERS: 1
 EXPORT_AMBE: False
 IP: 127.0.0.1
 PORT: 54917
-PASSPHRASE:
+PASSPHRASE: passw0rd
 GROUP_HANGTIME: 5
 USE_ACL: True
 REG_ACL: DENY:1
@@ -172,7 +178,7 @@ MAX_PEERS: 1
 EXPORT_AMBE: False
 IP:
 PORT: 52555
-PASSPHRASE:
+PASSPHRASE: passw0rd
 GROUP_HANGTIME: 0
 USE_ACL: True
 REG_ACL: DENY:1
@@ -243,9 +249,9 @@ LOCAL_PEER_FILE = local_peer_ids.json
 LOCAL_TGID_FILE = local_talkgroup_ids.json
 # Number of days before we reload DMR-MARC database files.
 RELOAD_TIME = 1
-PEER_URL = https://adn.systems/files/peer_ids.json
-SUBSCRIBER_URL = https://adn.systems/files/subscriber_ids.json
-TGID_URL = https://adn.systems/files/talkgroup_ids.json
+PEER_URL = https://servers.adn.systems/peer_ids.json
+SUBSCRIBER_URL = https://servers.adn.systems/subscriber_ids.json
+TGID_URL = https://servers.adn.systems/talkgroup_ids.json
 
 [LOGGER]
 # Settings for log files

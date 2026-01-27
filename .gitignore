@@ -118,6 +118,8 @@ hblink.cfg
 *.config
 *.bak
 rules.py
+config/dashboard_credentials.json
+config/encryption_key.secret
 subscriber_ids.*
 local_subscriber_ids.*
 peer_ids.*

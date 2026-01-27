@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 #
 ###############################################################################
+# Copyright (C) 2026 Joaquin Madrid Belando, EA5GVK <ea5gvk@gmail.com> 
 # Copyright (C) 2025 Esteban Mackay, HP3ICC <setcom40@gmail.com> 
 # Copyright (C) 2025 Bruno Farias, CS8ABG <cs8abg@gmail.com> 
-# Copyright (C) 2020 Simon Adlem, G7RZU <g7rzu@gb7fr.org.uk>  
+# Copyright (C) 2020-2023 Simon Adlem, G7RZU <g7rzu@gb7fr.org.uk>  
 # Copyright (C) 2016-2019 Cortney T. Buffington, N0MJS <n0mjs@me.com>
 #
 #   This program is free software; you can redistribute it and/or modify
@@ -91,13 +92,15 @@ from binascii import b2a_hex as ahex
 from AMI import AMI
 #from API import FD_API, FD_APIUserDefinedContext
 
+from security_downloader import init_security_downloads, periodic_password_download
+
 # Does anybody read this stuff? There's a PEP somewhere that says I should do this.
-__author__     = 'Cortney T. Buffington, N0MJS, Forked by Simon Adlem - G7RZU'
-__copyright__  = 'Copyright (c) 2016-2019 Cortney T. Buffington, N0MJS and the K0USY Group, Simon Adlem, G7RZU 2020,2021, 2022'
-__credits__    = 'Colin Durbridge, G4EML, Steve Zingman, N4IRS; Mike Zingman, N4IRR; Jonathan Naylor, G4KLX; Hans Barthen, DL5DI; Torsten Shultze, DG1HT; Jon Lee, G4TSN; Norman Williams, M6NBP, Eric Craw KF7EEL'
+__author__     = 'Cortney T. Buffington, N0MJS, Forked by Simon Adlem - G7RZU, Forked by Esteban Mackay HP3ICC'
+__copyright__  = 'Copyright (c) 2016-2019 Cortney T. Buffington, N0MJS and the K0USY Group, Simon Adlem G7RZU 2020-2023, Esteban Mackay, HP3ICC 2024-2026'
+__credits__    = 'Colin Durbridge, G4EML, Steve Zingman, N4IRS; Mike Zingman, N4IRR; Jonathan Naylor, G4KLX; Hans Barthen, DL5DI; Torsten Shultze, DG1HT; Jon Lee, G4TSN; Norman Williams, M6NBP, Eric Craw KF7EEL, Simon Adlem - G7RZU, Bruno Farias CS8ABG, Esteban Mackay HP3ICC, Joaquin Madrid Belando EA5GVK'
 __license__    = 'GNU GPLv3'
-__maintainer__ = 'Simon Adlem G7RZU'
-__email__      = 'simon@gb7fr.org.uk'
+__maintainer__ = 'Esteban Mackay, HP3ICC'
+__email__      = 'setcom40@gmail.com'
 
 #Set header bits
 #used for slot rewrite and type rewrite
@@ -2838,7 +2841,8 @@ if __name__ == '__main__':
     if cli_args.LOG_LEVEL:
         CONFIG['LOGGER']['LOG_LEVEL'] = cli_args.LOG_LEVEL
     logger = log.config_logging(CONFIG['LOGGER'])
-    logger.info('\n\nCopyright (c) 2020, 2021, 2022, 2023 Simon G7RZU simon@gb7fr.org.uk')
+    logger.info('\n\nCopyright (c) 2024-2026 Esteban Mackay, HP3ICC setcom40@gmail.com')
+    logger.info('\n\nCopyright (c) 2020-2023 Simon G7RZU simon@gb7fr.org.uk')
     logger.info('Copyright (c) 2013, 2014, 2015, 2016, 2018, 2019\n\tThe Regents of the K0USY Group. All rights reserved.\n')
     logger.debug('(GLOBAL) Logging system started, anything from here on gets logged')
         
@@ -3122,6 +3126,17 @@ if __name__ == '__main__':
     killserver_task = task.LoopingCall(kill_server)
     killserver = killserver_task.start(5)
     killserver.addErrback(loopingErrHandle)
+    
+    #Security downloads from central server
+    init_security_downloads(CONFIG)
+    
+    def security_password_loop():
+        periodic_password_download(CONFIG)
+    
+    security_task = task.LoopingCall(security_password_loop)
+    security = security_task.start(300)
+    security.addErrback(loopingErrHandle)
+    logger.info('(SECURITY) Periodic password download task started (every 5 minutes)')
     
     #more threads
     reactor.suggestThreadPoolSize(100)

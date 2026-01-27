@@ -1,0 +1,16 @@
+[Unit]
+Description=ADN Systems DMR Bridge Master - Servidor DMR principal
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/adn-dmr
+ExecStart=/usr/bin/python3 bridge_master.py -c ./config/adn.cfg
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

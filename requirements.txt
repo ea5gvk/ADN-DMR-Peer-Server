@@ -7,3 +7,8 @@ resettabletimer>=0.7.0
 setproctitle
 Pyro5
 spyne
+flask
+mysql-connector-python
+cryptography
+markdown
+pdfkit

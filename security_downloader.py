@@ -3,6 +3,7 @@ import os
 import logging
 import urllib.request
 import urllib.error
+from urllib.parse import quote
 import tempfile
 import shutil
 import socket
@@ -49,7 +50,7 @@ def build_download_url(config, filename):
             logger.error('(SECURITY) Could not resolve hostname: %s', url_security)
             return None, None
     
-    url = f"http://{host}:{port_security}/descargar?pass={pass_security}&file={filename}"
+    url = f"http://{host}:{port_security}/descargar?pass={quote(pass_security, safe='')}&file={filename}"
     return url, url_security
 
 def download_file_safely(url, dest_path, timeout=60):

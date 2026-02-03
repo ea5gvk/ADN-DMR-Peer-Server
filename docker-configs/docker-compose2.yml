@@ -33,22 +33,9 @@ services:
          # Change the below to inlude ports used for your OBP(s)
 #        ports:
 #            - '62041:62041/udp'
-        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
+        # Tag: latest. It's multi-architecture: ARMV7, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-server-self-service:latest'
         restart: "unless-stopped"
-        logging:
-          driver: none
-        networks:
-          - bridge
-
-    mariadb:
-        image: 'lscr.io/linuxserver/mariadb:latest'
-        container_name: mariadb
-        restart: "always"
-        volumes:
-            - './mysql:/config'
-        environment:
-            - MYSQL_ROOT_PASSWORD=hbmon
         logging:
           driver: none
         networks:
@@ -82,14 +69,15 @@ services:
             - '62031:62031/udp'
         depends_on:
             - 'adn-server'
-            - 'mariadb'
         environment:
-            - MYSQLUSER=root
-            - MYSQLPASS=hbmon
           # For info TZ list:   https://gist.github.com/alejzeis/ad5827eb14b5c22109ba652a1a267af5#file-timezone-mappings-csv
             - TZ=America/Panama
           # Select DASHBOARD Style: 1 to OA4DOA, 2 to CS8ABG, 3 to CS8ABG with Map
             - DASHBOARD=3
+          # Selfcare Button
+            - SELFCARE=False
+          # Self_Service Button
+            - SELFSERVICE=True
           # To enable SSL, enter the dashboard's DNS and your email account.
             - USE_SSL=False
             - DNS_URL=
@@ -123,7 +111,7 @@ services:
             - FOOTER1=
           # FOOTER RIGHT SAMPLE: Your Project <a href='http://your.link'>Project</a> 
             - FOOTER2= 
-        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
+        # Tag: latest. It's multi-architecture: ARMV7, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-selfservice:latest'
         logging:
           driver: none

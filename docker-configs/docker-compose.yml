@@ -34,7 +34,7 @@ services:
         ports:
             - '62031:62031/udp'
 #            - '62041:62041/udp'
-        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
+        # Tag: latest. It's multi-architecture: ARMV7, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-server-single:latest'
         restart: "unless-stopped"
         logging:
@@ -70,6 +70,8 @@ services:
             - TZ=America/Panama
           # Select DASHBOARD Style: 1 to OA4DOA, 2 to CS8ABG, 3 to CS8ABG with Map
             - DASHBOARD=3
+          # Selfcare Button
+            - SELFCARE=False
           # To enable SSL, enter the dashboard's DNS and your email account.
             - USE_SSL=False
             - DNS_URL=
@@ -103,7 +105,7 @@ services:
             - FOOTER1=
           # FOOTER RIGHT SAMPLE: Your Project <a href='http://your.link'>Project</a> 
             - FOOTER2= 
-        # Tag: latest. It's multi-architecture, AMD64, ARCH64.
+        # Tag: latest. It's multi-architecture: ARMV7, AMD64, ARCH64.
         image: 'registry.gitlab.com/hp3icc/fdmr/adn-mon2-single:latest'
         restart: "unless-stopped"
         logging:

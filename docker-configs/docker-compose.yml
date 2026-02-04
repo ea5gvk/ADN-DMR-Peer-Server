@@ -65,6 +65,8 @@ services:
             - '80:80/tcp'
             - '443:443/tcp'
             - '9000:9000'
+        depends_on:
+            - 'adn-server'
         environment:
           # For info TZ list:   https://gist.github.com/alejzeis/ad5827eb14b5c22109ba652a1a267af5#file-timezone-mappings-csv
             - TZ=America/Panama

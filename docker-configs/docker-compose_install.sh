@@ -34,7 +34,6 @@ chmod -R 755 /etc/ADN-Systems &&
 
 echo make json directory...
 mkdir -p /etc/ADN-Systems/data &&
-chown 54000:54000 /etc/ADN-Systems/data &&
 
 echo Install /etc/ADN-Systems/adn.cfg ... 
 cat << EOF > /etc/ADN-Systems/adn.cfg
@@ -199,8 +198,6 @@ OVERRIDE_IDENT_TG:
 
 EOF
 #
-chown -R 54000 /etc/ADN-Systems &&
-
 echo Get docker-compose.yml...
 cd /etc/ADN-Systems &&
 curl https://raw.githubusercontent.com/Amateur-Digital-Network/ADN-DMR-Peer-Server/develop/docker-configs/docker-compose.yml -o docker-compose.yml &&
@@ -209,21 +206,6 @@ if grep -q "Raspberry Pi" /proc/device-tree/model 2>/dev/null; then
     sed -i "s/^cpu_shares/#cpu_shares/g" /etc/ADN-Systems/docker-compose.yml
     sed -i "s/^mem_reservation/#mem_reservation/g" /etc/ADN-Systems/docker-compose.yml
 fi
-
-chmod 755 /etc/cron.daily/lastheard
-
-echo Tune network stack...
-cat << EOF > /etc/sysctl.conf &&
-net.core.rmem_default=134217728
-net.core.rmem_max=134217728
-net.core.wmem_max=134217728                       
-net.core.rmem_default=134217728
-net.core.netdev_max_backlog=250000
-net.netfilter.nf_conntrack_udp_timeout=15
-net.netfilter.nf_conntrack_udp_timeout_stream=35
-EOF
-
-/usr/sbin/sysctl -p &&
 
 echo Run ADN-Systems container...
 docker-compose up -d

@@ -45,12 +45,9 @@ services:
         container_name: monitor
         mem_reservation: 512m
         restart: "always"
-         # Before enabling local mapping, download the file to the host machine: 
-         # DASHBOARD Style:   1 for OA4DOA , dash 2 for CS8ABG
-         # file config dash 1 :     docker cp monitor:/opt/FDMR-Monitor1/fdmr-mon.cfg .
-         # file config dash 2 :     docker cp monitor:/opt/FDMR-Monitor2/fdmr-mon.cfg .
-        volumes:
              - './sql:/opt/adn-dashboard/html/db'
+             - './mysql:/var/lib/mysql'
+             - './ssl:/opt/ssl'
               # Dash1
 #             - './logo.png:/opt/FDMR-Monitor1/html/img/logo.png'
 #             - './favicon.ico:/opt/FDMR-Monitor1/html/img/favicon.ico'
@@ -62,11 +59,14 @@ services:
 #             - './logo.png:/opt/adn-dashboard/html/img/banner_SAMPLE.png'
 #             - './bk.jpg:/opt/adn-dashboard/html/img/background_SAMPLE.jpg'
 #             - './favicon.ico:/opt/adn-dashboard/html/img/favicon_SAMPLE.ico'
+              # Dash4
+#             - './logo.png:/opt/adn-monitor/frontend/dist/img/logo.png:ro'
+#             - './bk.jpg:/opt/adn-monitor/frontend/dist/img/bk.jpg:ro'
+#             - './favicon.ico:/opt/adn-monitor/frontend/dist/favicon.ico:ro'
         ports:
             - '80:80/tcp'
-           # - '443:443/tcp'
+#            - '443:443/tcp'
             - '9000:9000'
-            - '62031:62031/udp'
         depends_on:
             - 'adn-server'
         environment:
@@ -93,9 +93,12 @@ services:
           # Navbar Links Name, SAMPLE: NAV_LNK_NAME=LINKS
           # LINKx put as many as you want, SAMPLE: LINK1=NameX,http://url.com
             - NAV_LNK_NAME=
-            - LINK1=NameX,http://url.link
-            - LINK2=NameX,https://site.link
-            - LINK3=NameX,https://goaway.link 
+            - LINK1=
+            - LINK2=
+            - LINK3= 
+          # NEWSx put as many as you want, SAMPLE: NEWS1=NameX,http://url.com  OR: NEWS1=ADN Systems
+#            - NEWS1=NameX,http://url.link
+#            - NEWS2=Text 
           # World Wide Server List, SAMPLE: http://url/Hosts.csv
             - SERVER_LIST=
           # World Wide Bridge List, SAMPLE: https://url/Bridges.csv

@@ -12,3 +12,4 @@ mysql-connector-python
 cryptography
 markdown
 pdfkit
+gTTS>=2.3.1

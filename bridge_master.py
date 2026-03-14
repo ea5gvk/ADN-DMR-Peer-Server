@@ -36,6 +36,7 @@ This program currently only works with group voice calls.
 
 # Python modules we need
 import sys
+import os
 from bitarray import bitarray
 from time import time,sleep,perf_counter
 import importlib.util
@@ -52,7 +53,7 @@ from hashlib import blake2b
 # Twisted is pretty important, so I keep it separate
 from twisted.internet.protocol import Factory, Protocol
 from twisted.protocols.basic import NetstringReceiver
-from twisted.internet import reactor, task
+from twisted.internet import reactor, task, threads
 from twisted.web.server import Site
 
 #from spyne import Application
@@ -65,7 +66,7 @@ from hblink import HBSYSTEM, OPENBRIDGE, systems, hblink_handler, reportFactory,
 from dmr_utils3.utils import bytes_3, int_id, get_alias, bytes_4
 from dmr_utils3 import decode, bptc, const
 import config
-from config import acl_build
+from config import acl_build, reload_voice_config
 import log
 from const import *
 from mk_voice import pkt_gen
@@ -74,12 +75,13 @@ from utils import load_json, save_json
 
 #Read voices
 from read_ambe import readAMBE
+from tts_engine import ensure_tts_ambe
 #Remap some words for certain languages
 from i8n_voice_map import voiceMap
 
 # Stuff for socket reporting
 import pickle
-# REMOVE LATER from datetime import datetime
+from datetime import datetime
 # The module needs logging, but handlers, etc. are controlled by the parent
 import logging
 logger = logging.getLogger(__name__)
@@ -99,8 +101,8 @@ __author__     = 'Cortney T. Buffington, N0MJS, Forked by Simon Adlem - G7RZU, F
 __copyright__  = 'Copyright (c) 2016-2019 Cortney T. Buffington, N0MJS and the K0USY Group, Simon Adlem G7RZU 2020-2023, Esteban Mackay, HP3ICC 2024-2026'
 __credits__    = 'Colin Durbridge, G4EML, Steve Zingman, N4IRS; Mike Zingman, N4IRR; Jonathan Naylor, G4KLX; Hans Barthen, DL5DI; Torsten Shultze, DG1HT; Jon Lee, G4TSN; Norman Williams, M6NBP, Eric Craw KF7EEL, Simon Adlem - G7RZU, Bruno Farias CS8ABG, Esteban Mackay HP3ICC, Joaquin Madrid Belando EA5GVK'
 __license__    = 'GNU GPLv3'
-__maintainer__ = 'Esteban Mackay, HP3ICC'
-__email__      = 'setcom40@gmail.com'
+__maintainer__ = 'Esteban Mackay, HP3ICC - Joaquin Madrid, EA5GVK'
+__email__      = 'setcom40@gmail.com - ea5gvk@gmail.com'
 
 #Set header bits
 #used for slot rewrite and type rewrite
@@ -334,7 +336,7 @@ def make_single_reflector(_tgid,_tmout,_sourcesystem):
 def remove_bridge_system(system):
     _bridgestemp = {}
     _bridgetemp = {}
-    for _bridge in BRIDGES:
+    for _bridge in list(BRIDGES):
         for _bridgesystem in BRIDGES[_bridge]:
             if _bridgesystem['SYSTEM'] != system:
                 if _bridge not in _bridgestemp:
@@ -349,7 +351,7 @@ def remove_bridge_system(system):
 
 def deactivate_all_dynamic_bridges(system_name):
     """Desactiva todos los bridges dinámicos (no estáticos, no reflectores) de un sistema."""
-    for _bridge in BRIDGES:
+    for _bridge in list(BRIDGES):
         if _bridge[0:1] == '#':  # Saltar reflectores
             continue
         for _sys_entry in BRIDGES[_bridge]:
@@ -368,7 +370,9 @@ def rule_timer_loop():
     # Mantener registro de bridges dinámicos activos por sistema
     _active_dynamic_bridges = {}
     
-    for _bridge in BRIDGES:
+    _debug_msgs = []
+    
+    for _bridge in list(BRIDGES):
         _bridge_used = False
         
         ### MODIFIED: Detect special TGIDs (9990-9999) to exclude them from infinite timer logic
@@ -400,9 +404,9 @@ def rule_timer_loop():
                         if _system['SYSTEM'] not in _active_dynamic_bridges:
                             _active_dynamic_bridges[_system['SYSTEM']] = []
                         _active_dynamic_bridges[_system['SYSTEM']].append((_bridge, _system))
-                        logger.debug('(ROUTER) Conference Bridge ACTIVE (INFINITE TIMER): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        _debug_msgs.append('(ROUTER) Conference Bridge ACTIVE (INFINITE TIMER): System: %s Bridge: %s, TS: %s, TGID: %s' % (_system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID'])))
                     else:
-                        logger.debug('(ROUTER) Conference Bridge INACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        _debug_msgs.append('(ROUTER) Conference Bridge INACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s' % (_system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID'])))
                 elif _system['TO_TYPE'] == 'OFF':
                     if _system['ACTIVE'] == False:
                         # Activar inmediatamente sin timer
@@ -411,7 +415,7 @@ def rule_timer_loop():
                         logger.info('(ROUTER) Conference Bridge ACTIVATED (NO TIMEOUT): System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
                     else:
                         _bridge_used = True
-                        logger.debug('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        _debug_msgs.append('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s' % (_system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID'])))
             else:
                 # COMPORTAMIENTO ORIGINAL (SINGLE MODE ACTIVADO o bridges estáticos o TGIDs especiales)
                 if _system['TO_TYPE'] == 'ON':
@@ -427,7 +431,7 @@ def rule_timer_loop():
                             _bridge_used = True
                             logger.info('(ROUTER) Conference Bridge ACTIVE (ON timer running): System: %s Bridge: %s, TS: %s, TGID: %s, Timeout in: %.2fs,', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']),  timeout_in)
                     elif _system['ACTIVE'] == False:
-                        logger.debug('(ROUTER) Conference Bridge INACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        _debug_msgs.append('(ROUTER) Conference Bridge INACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s' % (_system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID'])))
                 elif _system['TO_TYPE'] == 'OFF':
                     if _system['ACTIVE'] == False:
                         if _system['TIMER'] < _now:
@@ -440,30 +444,33 @@ def rule_timer_loop():
                             logger.info('(ROUTER) Conference Bridge INACTIVE (OFF timer running): System: %s Bridge: %s, TS: %s, TGID: %s, Timeout in: %.2fs,', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']),  timeout_in)
                     elif _system['ACTIVE'] == True:
                         _bridge_used = True
-                        logger.debug('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                        _debug_msgs.append('(ROUTER) Conference Bridge ACTIVE (no change): System: %s Bridge: %s, TS: %s, TGID: %s' % (_system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID'])))
                 else:
                     if _system['SYSTEM'][0:3] != 'OBP':
                         _bridge_used = True
                     elif _system['SYSTEM'][0:3] == 'OBP' and _system['TO_TYPE'] == 'STAT':
                         _bridge_used = True
-                    logger.debug('(ROUTER) Conference Bridge NO ACTION: System: %s, Bridge: %s, TS: %s, TGID: %s', _system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID']))
+                    _debug_msgs.append('(ROUTER) Conference Bridge NO ACTION: System: %s, Bridge: %s, TS: %s, TGID: %s' % (_system['SYSTEM'], _bridge, _system['TS'], int_id(_system['TGID'])))
                 
         if _bridge_used == False:
             _remove_bridges.append(_bridge)
+    
+    if _debug_msgs:
+        logger.debug('\n'.join(_debug_msgs))
                 
     for _bridgerem in _remove_bridges:
         del BRIDGES[_bridgerem]
         logger.debug('(ROUTER) Unused conference bridge %s removed',_bridgerem)
 
     if CONFIG['REPORTS']['REPORT']:
-        report_server.send_clients(b'bridge updated')
+        reactor.callFromThread(report_server.send_clients, b'bridge updated')
         
 ### END MODIFIED ###
 
 def statTrimmer():
     logger.debug('(ROUTER) STAT trimmer loop started')
     _remove_bridges = deque()
-    for _bridge in BRIDGES:
+    for _bridge in list(BRIDGES):
         _bridge_stat = False
         _in_use = False
         for _system in BRIDGES[_bridge]:
@@ -496,8 +503,8 @@ def bridgeDebug():
         bridgeroll = 0
         dialroll = 0
         activeroll = 0
-        for _bridge in BRIDGES:
-            for enabled_system in BRIDGES[_bridge]:
+        for _bridge in list(BRIDGES):
+            for enabled_system in BRIDGES.get(_bridge, []):
                 if enabled_system['SYSTEM'] == system:
                     bridgeroll += 1
                     if enabled_system['ACTIVE']:
@@ -515,8 +522,8 @@ def bridgeDebug():
         if dialroll > 1 and CONFIG['SYSTEMS'][system]['MODE'] == 'MASTER':
             logger.warning('(BRIDGEDEBUG) system %s has more than one active dial bridge (%s) - fixing',system, dialroll)
             times = {}
-            for _bridge in BRIDGES:
-                for enabled_system in BRIDGES[_bridge]:
+            for _bridge in list(BRIDGES):
+                for enabled_system in BRIDGES.get(_bridge, []):
                     if enabled_system['ACTIVE'] and _bridge and _bridge[0:1] == '#':
                         times[enabled_system['TIMER']] = _bridge
             ordered = sorted(times.keys())
@@ -709,13 +716,16 @@ def sendSpeech(self,speech):
     _nine = bytes_3(9)
     _source_id = bytes_3(5000)
     _slot  = systems[system].STATUS[2]
+    _next_time = time()
     while True:
         try:
             pkt = next(speech)
         except StopIteration:
             break
-        #Packet every 60ms
-        sleep(0.058)
+        _next_time += 0.058
+        _delay = _next_time - time()
+        if _delay > 0.001:
+            sleep(_delay)
         reactor.callFromThread(sendVoicePacket,self,pkt,_source_id,_nine,_slot)
 
     logger.debug('(%s) Sendspeech thread ended',self._system)
@@ -747,45 +757,66 @@ def disconnectedVoice(system):
 
     sleep(1)
     _slot  = systems[system].STATUS[2]
+    _next_time = time()
     while True:
         try:
             pkt = next(speech)
         except StopIteration:
                 break
-        #Packet every 60ms
-        sleep(0.058)
+        _next_time += 0.058
+        _delay = _next_time - time()
+        if _delay > 0.001:
+            sleep(_delay)
         _stream_id = pkt[16:20]
         _pkt_time = time()
         reactor.callFromThread(sendVoicePacket,systems[system],pkt,_source_id,_nine,_slot)
-        logger.debug('(%s) disconnected voice thread end',system)
+    logger.debug('(%s) disconnected voice thread end',system)
 
 def playFileOnRequest(self,fileNumber):
     system = self._system
     _lang = CONFIG['SYSTEMS'][system]['ANNOUNCEMENT_LANGUAGE']
     _nine = bytes_3(9)
     _source_id = bytes_3(5000)
-    logger.debug('(%s) Sending contents of AMBE file: %s',system,fileNumber)
+
+    _ambe_file = '/{}/ondemand/{}.ambe'.format(_lang, fileNumber)
+    _full_path = os.path.join('./Audio', _lang, 'ondemand', '{}.ambe'.format(fileNumber))
+
+    if not os.path.isfile(_full_path):
+        logger.warning('(%s) AMBE file not found: %s', system, _full_path)
+        return
+
+    logger.info('(%s) Playing on-demand AMBE file: %s (ID: %s)', system, _full_path, fileNumber)
     sleep(1)
     _say = []
     try:
-        _say.append(AMBEobj.readSingleFile(''.join(['/',_lang,'/ondemand/',str(fileNumber),'.ambe'])))
-    except IOError:
-        logger.warning('(%s) cannot read file for number %s',system,fileNumber)
+        _say.append(AMBEobj.readSingleFile(_ambe_file))
+    except Exception as e:
+        logger.warning('(%s) Error reading AMBE file %s: %s', system, _full_path, e)
         return
+
+    if not _say or not _say[0]:
+        logger.warning('(%s) AMBE file empty or invalid: %s', system, _full_path)
+        return
+
     speech = pkt_gen(_source_id, _nine, bytes_4(9), 1, _say)
     sleep(1)
     _slot  = systems[system].STATUS[2]
+    _next_time = time()
+    _pkt_count = 0
     while True:
         try:
             pkt = next(speech)
         except StopIteration:
                 break
-        #Packet every 60ms
-        sleep(0.058)
+        _next_time += 0.058
+        _delay = _next_time - time()
+        if _delay > 0.001:
+            sleep(_delay)
         _stream_id = pkt[16:20]
         _pkt_time = time()
         reactor.callFromThread(sendVoicePacket,self,pkt,_source_id,_nine,_slot)
-    logger.debug('(%s) Sending AMBE file %s end',system,fileNumber)    
+        _pkt_count += 1
+    logger.info('(%s) On-demand playback complete: %s (%d packets)', system, fileNumber, _pkt_count)
 
 def threadIdent():
     logger.debug('(IDENT) starting ident thread')
@@ -861,17 +892,628 @@ def ident():
 
                 sleep(1)
                 _slot  = systems[system].STATUS[2]
+                _next_time = time()
                 while True:
                     try:
                         pkt = next(speech)
                     except StopIteration:
                             break
-                    #Packet every 60ms
-                    sleep(0.058)
+                    _next_time += 0.058
+                    _delay = _next_time - time()
+                    if _delay > 0.001:
+                        sleep(_delay)
                     
                     _stream_id = pkt[16:20]
                     _pkt_time = time()
                     reactor.callFromThread(sendVoicePacket,systems[system],pkt,_source_id,_dst_id,_slot)
+
+_announcement_last_hour = {1: -1, 2: -1, 3: -1, 4: -1}
+_announcement_running = {1: False, 2: False, 3: False, 4: False}
+
+_tts_last_hour = {1: -1, 2: -1, 3: -1, 4: -1}
+_tts_running = {1: False, 2: False, 3: False, 4: False}
+
+_voice_cfg_mtime = 0
+_voice_cfg_file = ''
+_voice_cfg_config_file = ''
+_ann_tasks = {}
+_tts_tasks = {}
+
+_FRAME_INTERVAL = 0.058
+
+_broadcast_queue = []
+_broadcast_active = False
+_BROADCAST_GAP = 1.5
+
+def _enqueue_broadcast(_type, _targets, _pkts_by_ts, _source_id, _dst_id, _tg, _num, _label):
+    global _broadcast_queue, _broadcast_active
+    _broadcast_queue.append({
+        'type': _type,
+        'targets': _targets,
+        'pkts_by_ts': _pkts_by_ts,
+        'source_id': _source_id,
+        'dst_id': _dst_id,
+        'tg': _tg,
+        'num': _num,
+        'label': _label
+    })
+    _pos = len(_broadcast_queue)
+    if _broadcast_active:
+        logger.info('(%s) Enqueued broadcast (position %s in queue)', _label, _pos)
+    else:
+        _start_next_broadcast()
+
+def _start_next_broadcast():
+    global _broadcast_queue, _broadcast_active
+    if not _broadcast_queue:
+        _broadcast_active = False
+        return
+    _broadcast_active = True
+    _item = _broadcast_queue.pop(0)
+    _type = _item['type']
+    _label = _item['label']
+    logger.info('(%s) Starting broadcast from queue (%s remaining)', _label, len(_broadcast_queue))
+    if _type == 'ann':
+        reactor.callLater(0.5, _announcementSendBroadcast, _item['targets'], _item['pkts_by_ts'], 0, _item['source_id'], _item['dst_id'], _item['tg'], 0, _item['num'])
+    elif _type == 'tts':
+        reactor.callLater(0.5, _ttsSendBroadcast, _item['targets'], _item['pkts_by_ts'], 0, _item['source_id'], _item['dst_id'], _item['tg'], 0, _item['num'])
+
+def _broadcast_finished():
+    global _broadcast_active
+    if _broadcast_queue:
+        logger.info('(QUEUE) Broadcast finished, next in %.1fs (%s queued)', _BROADCAST_GAP, len(_broadcast_queue))
+        reactor.callLater(_BROADCAST_GAP, _start_next_broadcast)
+    else:
+        _broadcast_active = False
+        logger.info('(QUEUE) Broadcast finished, queue empty')
+
+_RECORDING_MAX_FRAMES = 2750
+_recording_state = {
+    'active': False,
+    'stream_id': None,
+    'bursts': bitarray(endian='big'),
+    'start_time': 0,
+    'frames': 0,
+    'rf_src': None
+}
+
+def _handleRecording(dmrpkt, _frame_type, _dtype_vseq, _stream_id, pkt_time, _rf_src, _int_dst_id, _slot):
+    global _recording_state
+
+    if not CONFIG['GLOBAL']['RECORDING_ENABLED']:
+        return
+    if _int_dst_id != CONFIG['GLOBAL']['RECORDING_TG'] or _slot != CONFIG['GLOBAL']['RECORDING_TIMESLOT']:
+        return
+
+    if _frame_type == HBPF_DATA_SYNC and _dtype_vseq == HBPF_SLT_VHEAD:
+        if _recording_state['active'] and _recording_state['stream_id'] != _stream_id:
+            logger.info('(GRABACION) Nueva transmision detectada, guardando grabacion anterior (%d frames)', _recording_state['frames'])
+            _saveRecording()
+        _recording_state['active'] = True
+        _recording_state['stream_id'] = _stream_id
+        _recording_state['bursts'] = bitarray(endian='big')
+        _recording_state['start_time'] = pkt_time
+        _recording_state['frames'] = 0
+        _recording_state['rf_src'] = _rf_src
+        logger.info('(GRABACION) Grabacion iniciada - SUB: %s, TG: %s, TS: %s', int_id(_rf_src), _int_dst_id, _slot)
+        return
+
+    if not _recording_state['active'] or _recording_state['stream_id'] != _stream_id:
+        return
+
+    if _frame_type in (HBPF_VOICE, HBPF_VOICE_SYNC):
+        _bits_data = bitarray(endian='big')
+        _bits_data.frombytes(dmrpkt)
+        _recording_state['bursts'].extend(_bits_data[:108])
+        _recording_state['bursts'].extend(_bits_data[156:264])
+        _recording_state['frames'] += 1
+
+        if _recording_state['frames'] >= _RECORDING_MAX_FRAMES:
+            logger.info('(GRABACION) Duracion maxima alcanzada (%d frames), guardando', _recording_state['frames'])
+            _saveRecording()
+        return
+
+    if _frame_type == HBPF_DATA_SYNC and _dtype_vseq == HBPF_SLT_VTERM:
+        _saveRecording()
+        return
+
+def _saveRecording():
+    global _recording_state
+    if not _recording_state['active'] or _recording_state['frames'] == 0:
+        _recording_state['active'] = False
+        _recording_state['stream_id'] = None
+        logger.warning('(GRABACION) No hay frames grabados, descartando')
+        return
+
+    _lang = CONFIG['GLOBAL']['RECORDING_LANGUAGE']
+    _file = CONFIG['GLOBAL']['RECORDING_FILE']
+    _dir = './Audio/{}/ondemand/'.format(_lang)
+    _path = _dir + _file + '.ambe'
+
+    os.makedirs(_dir, exist_ok=True)
+
+    with open(_path, 'wb') as f:
+        f.write(_recording_state['bursts'].tobytes())
+
+    _duration = time() - _recording_state['start_time']
+    logger.info('(GRABACION) Grabacion guardada: %s (%d frames, %.1f segundos, SUB: %s)', _path, _recording_state['frames'], _duration, int_id(_recording_state['rf_src']))
+
+    _recording_state['active'] = False
+    _recording_state['stream_id'] = None
+    _recording_state['bursts'] = bitarray(endian='big')
+    _recording_state['frames'] = 0
+    _recording_state['rf_src'] = None
+
+def _sendFilteredByTG(_sys_obj, pkt, _tg, _ts, _label, _pkt_idx):
+    _sys_name = _sys_obj._system
+    _tg_str = str(_tg) if isinstance(_tg, int) else str(int_id(_tg))
+
+    _has_active_bridge = False
+    if _tg_str in BRIDGES:
+        for _be in BRIDGES[_tg_str]:
+            if _be['SYSTEM'] == _sys_name and _be['TS'] == _ts and _be['ACTIVE']:
+                _has_active_bridge = True
+                break
+
+    if _has_active_bridge:
+        _sys_obj.send_system(pkt)
+        return -1
+    else:
+        return 0
+
+def _announcementSendBroadcast(_targets, _pkts_by_ts, _pkt_idx, _source_id, _dst_id, _tg, _ts_unused, _ann_num=1, _next_time=None):
+    global _announcement_running
+    
+    _label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
+    
+    _total_pkts = len(_pkts_by_ts[1])
+    if _pkt_idx >= _total_pkts:
+        for _t in _targets:
+            try:
+                for _sid in list(_t['sys_obj'].STATUS.keys()):
+                    if _sid not in (1, 2):
+                        del _t['sys_obj'].STATUS[_sid]
+            except:
+                pass
+        _announcement_running[_ann_num] = False
+        logger.info('(%s) Broadcast complete: %s packets sent to %s targets', _label, _total_pkts, len(_targets))
+        _broadcast_finished()
+        return
+    
+    _now = time()
+    
+    for _t in _targets:
+        try:
+            _sys_obj = _t['sys_obj']
+            _slot = _t['slot']
+            _t_ts = _t['ts']
+            pkt = _pkts_by_ts[_t_ts][_pkt_idx]
+            _stream_id = pkt[16:20]
+            if _stream_id not in _sys_obj.STATUS:
+                _sys_obj.STATUS[_stream_id] = {
+                    'START':     _now,
+                    'CONTENTION':False,
+                    'RFS':       _source_id,
+                    'TGID':      _dst_id,
+                    'LAST':      _now
+                }
+                _slot['TX_TGID'] = _dst_id
+            else:
+                _sys_obj.STATUS[_stream_id]['LAST'] = _now
+                _slot['TX_TIME'] = _now
+            _fc = _sendFilteredByTG(_sys_obj, pkt, _tg, _t_ts, _label, _pkt_idx)
+            if _pkt_idx == 0 and _fc == 0:
+                logger.debug('(%s) TG %s TS%s not active on %s, skipping', _label, _tg, _t_ts, _t['name'])
+        except Exception as e:
+            logger.error('(%s) Error sending packet %s to %s/TS%s: %s', _label, _pkt_idx, _t['name'], _t.get('ts', '?'), e)
+    
+    _elapsed = time() - _now
+    if _next_time is None:
+        _next_time = _now + _FRAME_INTERVAL
+    else:
+        _next_time = _next_time + _FRAME_INTERVAL
+    _delay = max(0.001, _next_time - time())
+    
+    if _pkt_idx < 3:
+        logger.debug('(%s) Packet %s/%s broadcast to %s targets (proc: %.1fms, delay: %.1fms)', _label, _pkt_idx + 1, _total_pkts, len(_targets), _elapsed * 1000, _delay * 1000)
+    
+    reactor.callLater(_delay, _announcementSendBroadcast, _targets, _pkts_by_ts, _pkt_idx + 1, _source_id, _dst_id, _tg, _ts_unused, _ann_num, _next_time)
+
+def scheduledAnnouncement(_ann_num=1):
+    global _announcement_last_hour, _announcement_running
+    
+    _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
+    _label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
+    
+    if not CONFIG['GLOBAL']['{}_ENABLED'.format(_prefix)]:
+        return
+    
+    if _announcement_running[_ann_num]:
+        logger.debug('(%s) Previous announcement still running, skipping', _label)
+        return
+    
+    _mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
+    
+    if _mode == 'hourly':
+        _now = datetime.now()
+        if _now.minute != 0:
+            return
+        if _now.hour == _announcement_last_hour[_ann_num]:
+            return
+        _announcement_last_hour[_ann_num] = _now.hour
+    
+    _file = CONFIG['GLOBAL']['{}_FILE'.format(_prefix)]
+    _tg = CONFIG['GLOBAL']['{}_TG'.format(_prefix)]
+    _lang = CONFIG['GLOBAL']['{}_LANGUAGE'.format(_prefix)]
+    _dst_id = bytes_3(_tg)
+    _source_id = bytes_3(5000)
+    _peer_id = CONFIG['GLOBAL']['SERVER_ID']
+    
+    logger.info('(%s) Playing file: %s to TG %s (both TS, mode: %s, lang: %s)', _label, _file, _tg, _mode, _lang)
+    
+    _say = []
+    try:
+        _say.append(AMBEobj.readSingleFile(''.join(['/', _lang, '/ondemand/', str(_file), '.ambe'])))
+    except IOError:
+        logger.warning('(%s) Cannot read AMBE file: Audio/%s/ondemand/%s.ambe', _label, _lang, _file)
+        return
+    except Exception as e:
+        logger.error('(%s) Error reading AMBE file: %s', _label, e)
+        return
+    
+    logger.debug('(%s) AMBE file loaded, %s words', _label, len(_say))
+    
+    _tg_str = str(_tg)
+    
+    _excluded = ['ECHO', 'D-APRS']
+    _targets = []
+    
+    for _sn in list(systems.keys()):
+        if _sn in _excluded or any(_sn.startswith(ex + '-') for ex in _excluded):
+            continue
+        if _sn not in CONFIG['SYSTEMS']:
+            continue
+        if CONFIG['SYSTEMS'][_sn]['MODE'] != 'MASTER':
+            continue
+        if 'PEERS' not in CONFIG['SYSTEMS'][_sn]:
+            continue
+        
+        _has_peers = False
+        try:
+            for _pid in CONFIG['SYSTEMS'][_sn]['PEERS']:
+                if CONFIG['SYSTEMS'][_sn]['PEERS'][_pid]['CALLSIGN']:
+                    _has_peers = True
+                    break
+        except (KeyError, TypeError, RuntimeError):
+            continue
+        
+        if not _has_peers:
+            continue
+        
+        if _sn not in systems:
+            continue
+        
+        _active_slots = []
+        if _tg_str in BRIDGES:
+            for _be in BRIDGES[_tg_str]:
+                if _be['SYSTEM'] == _sn and _be['ACTIVE'] and _be['TS'] not in _active_slots:
+                    _active_slots.append(_be['TS'])
+        
+        if not _active_slots:
+            continue
+        
+        for _ts in _active_slots:
+            _slot_index = 2 if _ts == 2 else 1
+            _slot = systems[_sn].STATUS[_slot_index]
+            if (_slot['RX_TYPE'] != HBPF_SLT_VTERM) or (_slot['TX_TYPE'] != HBPF_SLT_VTERM):
+                logger.debug('(%s) System %s TS%s busy, skipping', _label, _sn, _ts)
+                continue
+            
+            _targets.append({
+                'sys_obj': systems[_sn],
+                'name': _sn,
+                'slot': _slot,
+                'ts': _ts
+            })
+    
+    if not _targets:
+        logger.info('(%s) No systems with active bridge for TG %s to send to', _label, _tg)
+        return
+    
+    _pkts_by_ts = {
+        1: list(pkt_gen(_source_id, _dst_id, _peer_id, 0, _say)),
+        2: list(pkt_gen(_source_id, _dst_id, _peer_id, 1, _say)),
+    }
+    
+    _ts1_count = sum(1 for t in _targets if t['ts'] == 1)
+    _ts2_count = sum(1 for t in _targets if t['ts'] == 2)
+    _sys_names = ', '.join(['{}/TS{}'.format(t['name'], t['ts']) for t in _targets[:8]])
+    if len(_targets) > 8:
+        _sys_names += ', ... +{}'.format(len(_targets) - 8)
+    logger.info('(%s) Broadcasting %s packets to %s targets (TS1:%s TS2:%s): %s',
+                _label, len(_pkts_by_ts[1]), len(_targets), _ts1_count, _ts2_count, _sys_names)
+    _announcement_running[_ann_num] = True
+    _enqueue_broadcast('ann', _targets, _pkts_by_ts, _source_id, _dst_id, _tg, _ann_num, _label)
+
+
+def _checkVoiceConfigReload():
+    global _voice_cfg_mtime, _ann_tasks, _tts_tasks
+
+    if not _voice_cfg_file or not os.path.isfile(_voice_cfg_file):
+        return
+
+    try:
+        _current_mtime = os.path.getmtime(_voice_cfg_file)
+    except OSError:
+        return
+
+    if _current_mtime == _voice_cfg_mtime:
+        return
+
+    _voice_cfg_mtime = _current_mtime
+    logger.info('(VOICE-RELOAD) Detectado cambio en voice.cfg, recargando configuracion...')
+
+    if not reload_voice_config(CONFIG, _voice_cfg_config_file):
+        logger.error('(VOICE-RELOAD) Error recargando voice.cfg')
+        return
+
+    for _ann_num in range(1, 5):
+        _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
+        _label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
+        _enabled = CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False)
+
+        if _ann_num in _ann_tasks and _ann_tasks[_ann_num].running:
+            _ann_tasks[_ann_num].stop()
+            logger.info('(VOICE-RELOAD) %s detenida', _label)
+            del _ann_tasks[_ann_num]
+
+        if _enabled:
+            _ann_mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
+            if _ann_mode == 'hourly':
+                _ann_check_interval = 30
+            else:
+                _ann_check_interval = CONFIG['GLOBAL']['{}_INTERVAL'.format(_prefix)]
+            _ann_task = task.LoopingCall(scheduledAnnouncement, _ann_num)
+            _ann_def = _ann_task.start(_ann_check_interval, now=False)
+            _ann_def.addErrback(loopingErrHandle)
+            _ann_tasks[_ann_num] = _ann_task
+            logger.info('(VOICE-RELOAD) %s activada - mode: %s, file: %s, TG: %s, TS: auto',
+                         _label, _ann_mode,
+                         CONFIG['GLOBAL']['{}_FILE'.format(_prefix)],
+                         CONFIG['GLOBAL']['{}_TG'.format(_prefix)])
+
+    for _tts_num in range(1, 5):
+        _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
+        _label = 'TTS-{}'.format(_tts_num)
+        _enabled = CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False)
+
+        if _tts_num in _tts_tasks and _tts_tasks[_tts_num].running:
+            _tts_tasks[_tts_num].stop()
+            logger.info('(VOICE-RELOAD) %s detenida', _label)
+            del _tts_tasks[_tts_num]
+
+        if _enabled:
+            _tts_mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
+            if _tts_mode == 'hourly':
+                _tts_check_interval = 30
+            else:
+                _tts_check_interval = CONFIG['GLOBAL']['{}_INTERVAL'.format(_prefix)]
+            _tts_task = task.LoopingCall(scheduledTTSAnnouncement, _tts_num)
+            _tts_def = _tts_task.start(_tts_check_interval, now=False)
+            _tts_def.addErrback(loopingErrHandle)
+            _tts_tasks[_tts_num] = _tts_task
+            logger.info('(VOICE-RELOAD) %s activada - mode: %s, file: %s, TG: %s, TS: auto',
+                         _label, _tts_mode,
+                         CONFIG['GLOBAL']['{}_FILE'.format(_prefix)],
+                         CONFIG['GLOBAL']['{}_TG'.format(_prefix)])
+
+    logger.info('(VOICE-RELOAD) Recarga de voice.cfg completada')
+
+
+def scheduledTTSAnnouncement(_tts_num=1):
+    global _tts_last_hour, _tts_running
+
+    _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
+    _label = 'TTS-{}'.format(_tts_num)
+
+    if not CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False):
+        return
+
+    if _tts_running[_tts_num]:
+        logger.debug('(%s) Previous TTS announcement still running, skipping', _label)
+        return
+
+    _mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
+
+    if _mode == 'hourly':
+        _now = datetime.now()
+        if _now.minute != 0:
+            return
+        if _now.hour == _tts_last_hour[_tts_num]:
+            return
+        _tts_last_hour[_tts_num] = _now.hour
+
+    _file = CONFIG['GLOBAL']['{}_FILE'.format(_prefix)]
+    _tg = CONFIG['GLOBAL']['{}_TG'.format(_prefix)]
+    _lang = CONFIG['GLOBAL']['{}_LANGUAGE'.format(_prefix)]
+
+    _tts_running[_tts_num] = True
+    logger.info('(%s) Iniciando conversion TTS en hilo separado para %s', _label, _file)
+
+    d = threads.deferToThread(ensure_tts_ambe, CONFIG, _tts_num)
+    d.addCallback(_ttsConversionDone, _tts_num, _file, _tg, _lang, _mode, _label)
+    d.addErrback(_ttsConversionError, _tts_num, _label)
+
+
+def _ttsConversionDone(_ambe_path, _tts_num, _file, _tg, _lang, _mode, _label):
+    global _tts_running
+
+    if not _ambe_path:
+        _tts_running[_tts_num] = False
+        logger.warning('(%s) No AMBE file available for TTS announcement %s', _label, _file)
+        return
+
+    logger.info('(%s) Playing TTS file: %s to TG %s (both TS, mode: %s, lang: %s)', _label, _file, _tg, _mode, _lang)
+
+    _dst_id = bytes_3(_tg)
+    _source_id = bytes_3(5000)
+    _peer_id = CONFIG['GLOBAL']['SERVER_ID']
+
+    _say = []
+    try:
+        _relative_path = _ambe_path
+        if _relative_path.startswith('./Audio/'):
+            _relative_path = _relative_path[len('./Audio'):]
+        elif _relative_path.startswith('Audio/'):
+            _relative_path = '/' + _relative_path[len('Audio'):]
+        _say.append(AMBEobj.readSingleFile(_relative_path))
+    except IOError:
+        _tts_running[_tts_num] = False
+        logger.warning('(%s) Cannot read AMBE file: %s', _label, _ambe_path)
+        return
+    except Exception as e:
+        _tts_running[_tts_num] = False
+        logger.error('(%s) Error reading AMBE file: %s', _label, e)
+        return
+
+    logger.debug('(%s) AMBE file loaded, %s words', _label, len(_say))
+
+    _tg_str = str(_tg)
+
+    _excluded = ['ECHO', 'D-APRS']
+    _targets = []
+
+    for _sn in list(systems.keys()):
+        if _sn in _excluded or any(_sn.startswith(ex + '-') for ex in _excluded):
+            continue
+        if _sn not in CONFIG['SYSTEMS']:
+            continue
+        if CONFIG['SYSTEMS'][_sn]['MODE'] != 'MASTER':
+            continue
+        if 'PEERS' not in CONFIG['SYSTEMS'][_sn]:
+            continue
+
+        _has_peers = False
+        try:
+            for _pid in CONFIG['SYSTEMS'][_sn]['PEERS']:
+                if CONFIG['SYSTEMS'][_sn]['PEERS'][_pid]['CALLSIGN']:
+                    _has_peers = True
+                    break
+        except (KeyError, TypeError, RuntimeError):
+            continue
+
+        if not _has_peers:
+            continue
+
+        if _sn not in systems:
+            continue
+
+        _active_slots = []
+        if _tg_str in BRIDGES:
+            for _be in BRIDGES[_tg_str]:
+                if _be['SYSTEM'] == _sn and _be['ACTIVE'] and _be['TS'] not in _active_slots:
+                    _active_slots.append(_be['TS'])
+
+        if not _active_slots:
+            continue
+
+        for _ts in _active_slots:
+            _slot_index = 2 if _ts == 2 else 1
+            _slot = systems[_sn].STATUS[_slot_index]
+            if (_slot['RX_TYPE'] != HBPF_SLT_VTERM) or (_slot['TX_TYPE'] != HBPF_SLT_VTERM):
+                logger.debug('(%s) System %s TS%s busy, skipping', _label, _sn, _ts)
+                continue
+
+            _targets.append({
+                'sys_obj': systems[_sn],
+                'name': _sn,
+                'slot': _slot,
+                'ts': _ts
+            })
+            logger.debug('(%s) System %s added for TG %s TS%s', _label, _sn, _tg, _ts)
+
+    if not _targets:
+        _tts_running[_tts_num] = False
+        logger.info('(%s) No systems with active bridge for TG %s to send to', _label, _tg)
+        return
+
+    _pkts_by_ts = {
+        1: list(pkt_gen(_source_id, _dst_id, _peer_id, 0, _say)),
+        2: list(pkt_gen(_source_id, _dst_id, _peer_id, 1, _say)),
+    }
+
+    _ts1_count = sum(1 for t in _targets if t['ts'] == 1)
+    _ts2_count = sum(1 for t in _targets if t['ts'] == 2)
+    _sys_names = ', '.join(['{}/TS{}'.format(t['name'], t['ts']) for t in _targets[:8]])
+    if len(_targets) > 8:
+        _sys_names += ', ... +{}'.format(len(_targets) - 8)
+    logger.info('(%s) Broadcasting %s packets to %s targets (TS1:%s TS2:%s): %s',
+                _label, len(_pkts_by_ts[1]), len(_targets), _ts1_count, _ts2_count, _sys_names)
+    _enqueue_broadcast('tts', _targets, _pkts_by_ts, _source_id, _dst_id, _tg, _tts_num, _label)
+
+
+def _ttsConversionError(failure, _tts_num, _label):
+    global _tts_running
+    _tts_running[_tts_num] = False
+    logger.error('(%s) Error en conversion TTS: %s', _label, failure.getErrorMessage())
+
+def _ttsSendBroadcast(_targets, _pkts_by_ts, _pkt_idx, _source_id, _dst_id, _tg, _ts_unused, _tts_num=1, _next_time=None):
+    global _tts_running
+
+    _label = 'TTS-{}'.format(_tts_num)
+
+    _total_pkts = len(_pkts_by_ts[1])
+    if _pkt_idx >= _total_pkts:
+        for _t in _targets:
+            try:
+                for _sid in list(_t['sys_obj'].STATUS.keys()):
+                    if _sid not in (1, 2):
+                        del _t['sys_obj'].STATUS[_sid]
+            except:
+                pass
+        _tts_running[_tts_num] = False
+        logger.info('(%s) Broadcast complete: %s packets sent to %s targets', _label, _total_pkts, len(_targets))
+        _broadcast_finished()
+        return
+
+    _now = time()
+
+    for _t in _targets:
+        try:
+            _sys_obj = _t['sys_obj']
+            _slot = _t['slot']
+            _t_ts = _t['ts']
+            pkt = _pkts_by_ts[_t_ts][_pkt_idx]
+            _stream_id = pkt[16:20]
+            if _stream_id not in _sys_obj.STATUS:
+                _sys_obj.STATUS[_stream_id] = {
+                    'START':     _now,
+                    'CONTENTION':False,
+                    'RFS':       _source_id,
+                    'TGID':      _dst_id,
+                    'LAST':      _now
+                }
+                _slot['TX_TGID'] = _dst_id
+            else:
+                _sys_obj.STATUS[_stream_id]['LAST'] = _now
+                _slot['TX_TIME'] = _now
+            _fc = _sendFilteredByTG(_sys_obj, pkt, _tg, _t_ts, _label, _pkt_idx)
+            if _pkt_idx == 0 and _fc == 0:
+                logger.debug('(%s) TG %s TS%s not active on %s, skipping', _label, _tg, _t_ts, _t['name'])
+        except Exception as e:
+            logger.error('(%s) Error sending packet %s to %s/TS%s: %s', _label, _pkt_idx, _t['name'], _t.get('ts', '?'), e)
+
+    _elapsed = time() - _now
+    if _next_time is None:
+        _next_time = _now + _FRAME_INTERVAL
+    else:
+        _next_time = _next_time + _FRAME_INTERVAL
+    _delay = max(0.001, _next_time - time())
+
+    if _pkt_idx < 3:
+        logger.debug('(%s) Packet %s/%s broadcast to %s targets (proc: %.1fms, delay: %.1fms)', _label, _pkt_idx + 1, _total_pkts, len(_targets), _elapsed * 1000, _delay * 1000)
+
+    reactor.callLater(_delay, _ttsSendBroadcast, _targets, _pkts_by_ts, _pkt_idx + 1, _source_id, _dst_id, _tg, _ts_unused, _tts_num, _next_time)
 
 def bridge_reset():
     logger.debug('(BRIDGERESET) Running bridge resetter')
@@ -2505,6 +3147,7 @@ class routerHBP(HBSYSTEM):
                             self._system, int_id(_stream_id), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot)
                         if CONFIG['REPORTS']['REPORT']:
                             self._report.send_bridgeEvent('GROUP VOICE,START,RX,{},{},{},{},{},{}'.format(self._system, int_id(_stream_id), int_id(_peer_id), int_id(_rf_src), _slot, int_id(_dst_id)).encode(encoding='utf-8', errors='ignore'))
+
                 else:
                     logger.info('(%s) *VCSBK* STREAM ID: %s SUB: %s (%s) PEER: %s (%s) TGID %s (%s), TS %s _dtype_vseq: %s', 
                             self._system, int_id(_stream_id), get_alias(_rf_src, subscriber_ids), int_id(_rf_src), get_alias(_peer_id, peer_ids), int_id(_peer_id), get_alias(_dst_id, talkgroup_ids), int_id(_dst_id), _slot, _dtype_vseq)
@@ -2609,6 +3252,8 @@ class routerHBP(HBSYSTEM):
             self.STATUS[_slot]['lastSeq'] = _seq
             #Save this packet
             self.STATUS[_slot]['lastData'] = _data
+
+            _handleRecording(dmrpkt, _frame_type, _dtype_vseq, _stream_id, pkt_time, _rf_src, _int_dst_id, _slot)
             
             ### MODIFIED: Prioritize routing for the TGID that just created a bridge
             _sysIgnore = deque()
@@ -2841,6 +3486,7 @@ if __name__ == '__main__':
     if cli_args.LOG_LEVEL:
         CONFIG['LOGGER']['LOG_LEVEL'] = cli_args.LOG_LEVEL
     logger = log.config_logging(CONFIG['LOGGER'])
+    logger.info('\n\nCopyright (c) 2026 Joaquin Madrid Belando, EA5GVK ea5gvk@gmail.com')
     logger.info('\n\nCopyright (c) 2024-2026 Esteban Mackay, HP3ICC setcom40@gmail.com')
     logger.info('\n\nCopyright (c) 2020-2023 Simon G7RZU simon@gb7fr.org.uk')
     logger.info('Copyright (c) 2013, 2014, 2015, 2016, 2018, 2019\n\tThe Regents of the K0USY Group. All rights reserved.\n')
@@ -3069,7 +3715,9 @@ if __name__ == '__main__':
 #        logger.info('(API) API not started')
 
     # Initialize the rule timer -- this if for user activated stuff
-    rule_timer_task = task.LoopingCall(rule_timer_loop)
+    def _rule_timer_in_thread():
+        return threads.deferToThread(rule_timer_loop)
+    rule_timer_task = task.LoopingCall(_rule_timer_in_thread)
     rule_timer = rule_timer_task.start(52)
     rule_timer.addErrback(loopingErrHandle)
 
@@ -3102,12 +3750,16 @@ if __name__ == '__main__':
         
     #STAT trimmer - once every 5 mins (roughly - shifted so all timed tasks don't run at once
     if CONFIG['GLOBAL']['GEN_STAT_BRIDGES']:
-        stat_trimmer_task = task.LoopingCall(statTrimmer)
+        def _stat_trimmer_in_thread():
+            return threads.deferToThread(statTrimmer)
+        stat_trimmer_task = task.LoopingCall(_stat_trimmer_in_thread)
         stat_trimmer = stat_trimmer_task.start(303)#3600
         stat_trimmer.addErrback(loopingErrHandle)
         
     #KA Reporting
-    ka_task = task.LoopingCall(kaReporting)
+    def _ka_reporting_in_thread():
+        return threads.deferToThread(kaReporting)
+    ka_task = task.LoopingCall(_ka_reporting_in_thread)
     ka = ka_task.start(60)
     ka.addErrback(loopingErrHandle)
 
@@ -3126,7 +3778,64 @@ if __name__ == '__main__':
     killserver_task = task.LoopingCall(kill_server)
     killserver = killserver_task.start(5)
     killserver.addErrback(loopingErrHandle)
-    
+
+    for _ann_num in range(1, 5):
+        _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
+        _label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
+        if CONFIG['GLOBAL']['{}_ENABLED'.format(_prefix)]:
+            _ann_mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
+            if _ann_mode == 'hourly':
+                _ann_check_interval = 30
+            else:
+                _ann_check_interval = CONFIG['GLOBAL']['{}_INTERVAL'.format(_prefix)]
+            _ann_task = task.LoopingCall(scheduledAnnouncement, _ann_num)
+            _ann_def = _ann_task.start(_ann_check_interval, now=False)
+            _ann_def.addErrback(loopingErrHandle)
+            _ann_tasks[_ann_num] = _ann_task
+            logger.info('(%s) Scheduled announcements enabled - mode: %s, file: %s, TG: %s, TS: auto, lang: %s',
+                         _label,
+                         _ann_mode,
+                         CONFIG['GLOBAL']['{}_FILE'.format(_prefix)],
+                         CONFIG['GLOBAL']['{}_TG'.format(_prefix)],
+                         CONFIG['GLOBAL']['{}_LANGUAGE'.format(_prefix)])
+            if _ann_mode == 'interval':
+                logger.info('(%s) Interval: every %s seconds', _label, _ann_check_interval)
+
+    for _tts_num in range(1, 5):
+        _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
+        _label = 'TTS-{}'.format(_tts_num)
+        if CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False):
+            _tts_mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
+            if _tts_mode == 'hourly':
+                _tts_check_interval = 30
+            else:
+                _tts_check_interval = CONFIG['GLOBAL']['{}_INTERVAL'.format(_prefix)]
+            _tts_task = task.LoopingCall(scheduledTTSAnnouncement, _tts_num)
+            _tts_def = _tts_task.start(_tts_check_interval, now=False)
+            _tts_def.addErrback(loopingErrHandle)
+            _tts_tasks[_tts_num] = _tts_task
+            logger.info('(%s) Scheduled TTS announcements enabled - mode: %s, file: %s, TG: %s, TS: auto, lang: %s',
+                         _label,
+                         _tts_mode,
+                         CONFIG['GLOBAL']['{}_FILE'.format(_prefix)],
+                         CONFIG['GLOBAL']['{}_TG'.format(_prefix)],
+                         CONFIG['GLOBAL']['{}_LANGUAGE'.format(_prefix)])
+            if _tts_mode == 'interval':
+                logger.info('(%s) Interval: every %s seconds', _label, _tts_check_interval)
+
+    _voice_cfg_config_file = cli_args.CONFIG_FILE
+    _voice_cfg_dir = os.path.dirname(os.path.abspath(cli_args.CONFIG_FILE))
+    _voice_cfg_file = os.path.join(_voice_cfg_dir, 'voice.cfg')
+    if os.path.isfile(_voice_cfg_file):
+        try:
+            _voice_cfg_mtime = os.path.getmtime(_voice_cfg_file)
+        except OSError:
+            _voice_cfg_mtime = 0
+    voice_reload_task = task.LoopingCall(_checkVoiceConfigReload)
+    voice_reload = voice_reload_task.start(15)
+    voice_reload.addErrback(loopingErrHandle)
+    logger.info('(VOICE-RELOAD) Vigilancia de voice.cfg activada (cada 15 segundos)')
+
     #Security downloads from central server
     init_security_downloads(CONFIG)
     

@@ -57,6 +57,65 @@ Preferred communication style: Simple, everyday language.
 
 **Rationale**: Provides accessible feedback to users without requiring external TTS systems, maintains compatibility with DMR audio codecs.
 
+### Scheduled Announcements (Locuciones Programadas)
+
+**Problem**: Need to broadcast pre-recorded AMBE voice announcements on a schedule to specific talkgroups
+**Solution**: Configurable scheduled announcement system in `bridge_master.py` with up to 4 independent announcement slots
+
+**Configuration in config/voice.cfg [VOICE] section** (separated from adn.cfg):
+- Slot 1: `ANNOUNCEMENT_*` (ENABLED, FILE, TG, TIMESLOT, MODE, INTERVAL, LANGUAGE)
+- Slot 2: `ANNOUNCEMENT2_*` (same parameters with prefix ANNOUNCEMENT2_)
+- Slot 3: `ANNOUNCEMENT3_*` (same parameters with prefix ANNOUNCEMENT3_)
+- Slot 4: `ANNOUNCEMENT4_*` (same parameters with prefix ANNOUNCEMENT4_)
+
+**Note**: voice.cfg is loaded automatically from the same directory as adn.cfg. If voice.cfg does not exist, the server starts normally with all announcements and recording disabled (safe defaults).
+
+Each slot supports:
+- `*_ENABLED`: True/False to enable/disable
+- `*_FILE`: Name of the .ambe file (without extension, located in Audio/<lang>/ondemand/)
+- `*_TG`: Talkgroup number where the announcement is broadcast
+- `*_TIMESLOT`: Timeslot 1 or 2 (default: 2)
+- `*_MODE`: `interval` (every X seconds) or `hourly` (at the top of each hour)
+- `*_INTERVAL`: Interval in seconds (only used when mode is `interval`)
+- `*_LANGUAGE`: Language folder for the AMBE file (e.g., es_ES, en_GB)
+
+**Behavior**:
+- Each slot runs independently with its own LoopingCall timer
+- In `hourly` mode: checks every 30 seconds, plays only when minute == 0
+- In `interval` mode: plays at the configured interval
+- Broadcasts to ALL MASTER systems simultaneously (like bridge routing)
+- Uses adaptive 60ms frame timing for clean audio
+- Only plays on MASTER systems (not OPENBRIDGE), excludes ECHO/D-APRS
+- Skips systems that are busy (RX or TX active)
+- Audio source ID: 5000, uses SERVER_ID as peer ID
+- Log labels: LOCUCION (slot 1), LOCUCION-2, LOCUCION-3, LOCUCION-4
+
+### Voice Recording System (Grabaciones Locuciones)
+
+**Problem**: Need to record voice announcements directly from radio traffic for later playback as scheduled announcements
+**Solution**: AMBE voice recorder that captures traffic on a configured TG/TS
+
+**Configuration in config/voice.cfg [VOICE] section** (same file as announcements):
+- `RECORDING_ENABLED`: True/False to enable/disable recording
+- `RECORDING_TG`: Talkgroup to monitor for recording
+- `RECORDING_TIMESLOT`: Timeslot to monitor (1 or 2)
+- `RECORDING_FILE`: Output filename (without .ambe extension)
+- `RECORDING_LANGUAGE`: Language folder (determines save path: Audio/<lang>/ondemand/<file>.ambe)
+
+**Behavior**:
+- Records any voice transmission on the configured TG/TS
+- Extracts raw AMBE bursts (108-bit pairs) from DMRD voice frames
+- Maximum recording duration: 2 minutes 45 seconds (2750 frames)
+- Automatically saves when transmission ends (voice terminator) or max duration reached
+- Saved file is directly compatible with the announcement playback system
+- Recording runs in the reactor thread (no blocking)
+- Only processes validated frames (after duplicate/rate/loop checks)
+- Log label: GRABACION
+
+**Integration with Announcements**:
+- Record with `RECORDING_FILE: mi_locucion` and `RECORDING_LANGUAGE: es_ES`
+- Playback with `ANNOUNCEMENT_FILE: mi_locucion` and `ANNOUNCEMENT_LANGUAGE: es_ES`
+
 ### Individual Password Authentication
 
 **Problem**: Need individual password authentication per Radio ID (indicativo) for enhanced security

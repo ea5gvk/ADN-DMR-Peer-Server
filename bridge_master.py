@@ -1119,7 +1119,7 @@ def _announcementSendBroadcast(_targets, _pkts_by_ts, _pkt_idx, _source_id, _dst
     
     reactor.callLater(_delay, _announcementSendBroadcast, _targets, _pkts_by_ts, _pkt_idx + 1, _source_id, _dst_id, _tg, _ts_unused, _ann_num, _next_time)
 
-def scheduledAnnouncement(_ann_num=1):
+def scheduledAnnouncement(_ann_num=1, _retry=0):
     global _announcement_last_hour, _announcement_running
     
     _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
@@ -1129,18 +1129,25 @@ def scheduledAnnouncement(_ann_num=1):
         return
     
     if _announcement_running[_ann_num]:
-        logger.debug('(%s) Previous announcement still running, skipping', _label)
+        if _retry == 0:
+            logger.debug('(%s) Previous announcement still running, skipping', _label)
         return
     
     _mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
     
-    if _mode == 'hourly':
+    if _mode == 'hourly' and _retry == 0:
         _now = datetime.now()
         if _now.minute != 0:
             return
         if _now.hour == _announcement_last_hour[_ann_num]:
             return
         _announcement_last_hour[_ann_num] = _now.hour
+    
+    if _broadcast_active and _retry < 60:
+        if _retry == 0:
+            logger.debug('(%s) Broadcast queue busy, deferring prep', _label)
+        reactor.callLater(3.0 + _ann_num * 0.5, scheduledAnnouncement, _ann_num, _retry + 1)
+        return
     
     _file = CONFIG['GLOBAL']['{}_FILE'.format(_prefix)]
     _tg = CONFIG['GLOBAL']['{}_TG'.format(_prefix)]
@@ -1310,7 +1317,7 @@ def _checkVoiceConfigReload():
     logger.info('(VOICE-RELOAD) Recarga de voice.cfg completada')
 
 
-def scheduledTTSAnnouncement(_tts_num=1):
+def scheduledTTSAnnouncement(_tts_num=1, _retry=0):
     global _tts_last_hour, _tts_running
 
     _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
@@ -1320,18 +1327,25 @@ def scheduledTTSAnnouncement(_tts_num=1):
         return
 
     if _tts_running[_tts_num]:
-        logger.debug('(%s) Previous TTS announcement still running, skipping', _label)
+        if _retry == 0:
+            logger.debug('(%s) Previous TTS announcement still running, skipping', _label)
         return
 
     _mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
 
-    if _mode == 'hourly':
+    if _mode == 'hourly' and _retry == 0:
         _now = datetime.now()
         if _now.minute != 0:
             return
         if _now.hour == _tts_last_hour[_tts_num]:
             return
         _tts_last_hour[_tts_num] = _now.hour
+
+    if _broadcast_active and _retry < 60:
+        if _retry == 0:
+            logger.debug('(%s) Broadcast queue busy, deferring TTS prep', _label)
+        reactor.callLater(3.0 + _tts_num * 0.5, scheduledTTSAnnouncement, _tts_num, _retry + 1)
+        return
 
     _file = CONFIG['GLOBAL']['{}_FILE'.format(_prefix)]
     _tg = CONFIG['GLOBAL']['{}_TG'.format(_prefix)]
@@ -1345,12 +1359,18 @@ def scheduledTTSAnnouncement(_tts_num=1):
     d.addErrback(_ttsConversionError, _tts_num, _label)
 
 
-def _ttsConversionDone(_ambe_path, _tts_num, _file, _tg, _lang, _mode, _label):
+def _ttsConversionDone(_ambe_path, _tts_num, _file, _tg, _lang, _mode, _label, _retry=0):
     global _tts_running
 
     if not _ambe_path:
         _tts_running[_tts_num] = False
         logger.warning('(%s) No AMBE file available for TTS announcement %s', _label, _file)
+        return
+
+    if _broadcast_active and _retry < 60:
+        if _retry == 0:
+            logger.debug('(%s) Broadcast queue busy, deferring TTS packet prep', 'TTS-{}'.format(_tts_num))
+        reactor.callLater(3.0 + _tts_num * 0.5, _ttsConversionDone, _ambe_path, _tts_num, _file, _tg, _lang, _mode, _label, _retry + 1)
         return
 
     logger.info('(%s) Playing TTS file: %s to TG %s (both TS, mode: %s, lang: %s)', _label, _file, _tg, _mode, _lang)

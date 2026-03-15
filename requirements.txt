@@ -13,3 +13,5 @@ cryptography
 markdown
 pdfkit
 gTTS>=2.3.1
+# Dependencias del sistema (instalar con apt/dnf/apk, NO con pip):
+# ffmpeg - Requerido por TTS para convertir MP3 a WAV (apt install ffmpeg)

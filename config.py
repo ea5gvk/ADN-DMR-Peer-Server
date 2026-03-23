@@ -32,6 +32,7 @@ change.
 import configparser
 import sys
 import os
+import re
 import const
 
 import socket
@@ -409,31 +410,35 @@ def build_config(_config_file):
     _voice_section = 'VOICE'
     _has_voice = voice_config.has_section(_voice_section)
 
-    CONFIG['GLOBAL'].update({
-        'ANNOUNCEMENT_ENABLED': voice_config.getboolean(_voice_section, 'ANNOUNCEMENT_ENABLED', fallback=False) if _has_voice else False,
-        'ANNOUNCEMENT_FILE': voice_config.get(_voice_section, 'ANNOUNCEMENT_FILE', fallback='locucion') if _has_voice else 'locucion',
-        'ANNOUNCEMENT_TG': voice_config.getint(_voice_section, 'ANNOUNCEMENT_TG', fallback=9) if _has_voice else 9,
-        'ANNOUNCEMENT_MODE': voice_config.get(_voice_section, 'ANNOUNCEMENT_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'ANNOUNCEMENT_INTERVAL': voice_config.getint(_voice_section, 'ANNOUNCEMENT_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'ANNOUNCEMENT_LANGUAGE': voice_config.get(_voice_section, 'ANNOUNCEMENT_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
-        'ANNOUNCEMENT2_ENABLED': voice_config.getboolean(_voice_section, 'ANNOUNCEMENT2_ENABLED', fallback=False) if _has_voice else False,
-        'ANNOUNCEMENT2_FILE': voice_config.get(_voice_section, 'ANNOUNCEMENT2_FILE', fallback='locucion') if _has_voice else 'locucion',
-        'ANNOUNCEMENT2_TG': voice_config.getint(_voice_section, 'ANNOUNCEMENT2_TG', fallback=9) if _has_voice else 9,
-        'ANNOUNCEMENT2_MODE': voice_config.get(_voice_section, 'ANNOUNCEMENT2_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'ANNOUNCEMENT2_INTERVAL': voice_config.getint(_voice_section, 'ANNOUNCEMENT2_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'ANNOUNCEMENT2_LANGUAGE': voice_config.get(_voice_section, 'ANNOUNCEMENT2_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
-        'ANNOUNCEMENT3_ENABLED': voice_config.getboolean(_voice_section, 'ANNOUNCEMENT3_ENABLED', fallback=False) if _has_voice else False,
-        'ANNOUNCEMENT3_FILE': voice_config.get(_voice_section, 'ANNOUNCEMENT3_FILE', fallback='locucion') if _has_voice else 'locucion',
-        'ANNOUNCEMENT3_TG': voice_config.getint(_voice_section, 'ANNOUNCEMENT3_TG', fallback=9) if _has_voice else 9,
-        'ANNOUNCEMENT3_MODE': voice_config.get(_voice_section, 'ANNOUNCEMENT3_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'ANNOUNCEMENT3_INTERVAL': voice_config.getint(_voice_section, 'ANNOUNCEMENT3_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'ANNOUNCEMENT3_LANGUAGE': voice_config.get(_voice_section, 'ANNOUNCEMENT3_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
-        'ANNOUNCEMENT4_ENABLED': voice_config.getboolean(_voice_section, 'ANNOUNCEMENT4_ENABLED', fallback=False) if _has_voice else False,
-        'ANNOUNCEMENT4_FILE': voice_config.get(_voice_section, 'ANNOUNCEMENT4_FILE', fallback='locucion') if _has_voice else 'locucion',
-        'ANNOUNCEMENT4_TG': voice_config.getint(_voice_section, 'ANNOUNCEMENT4_TG', fallback=9) if _has_voice else 9,
-        'ANNOUNCEMENT4_MODE': voice_config.get(_voice_section, 'ANNOUNCEMENT4_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'ANNOUNCEMENT4_INTERVAL': voice_config.getint(_voice_section, 'ANNOUNCEMENT4_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'ANNOUNCEMENT4_LANGUAGE': voice_config.get(_voice_section, 'ANNOUNCEMENT4_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
+    _ann_nums = []
+    _tts_nums = []
+    if _has_voice:
+        for _key in voice_config.options(_voice_section):
+            _key_upper = _key.upper()
+            _m = re.match(r'^ANNOUNCEMENT(\d*)_ENABLED$', _key_upper)
+            if _m:
+                _ann_nums.append(1 if _m.group(1) == '' else int(_m.group(1)))
+            _m = re.match(r'^TTS_ANNOUNCEMENT(\d+)_ENABLED$', _key_upper)
+            if _m:
+                _tts_nums.append(int(_m.group(1)))
+    _ann_nums = sorted(set(_ann_nums))
+    _tts_nums = sorted(set(_tts_nums))
+
+    _voice_data = {
+        '_ANN_NUMS': list(_ann_nums),
+        '_TTS_NUMS': list(_tts_nums),
+    }
+
+    for _ann_num in _ann_nums:
+        _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
+        _voice_data['{}_ENABLED'.format(_prefix)] = voice_config.getboolean(_voice_section, '{}_ENABLED'.format(_prefix), fallback=False) if _has_voice else False
+        _voice_data['{}_FILE'.format(_prefix)] = voice_config.get(_voice_section, '{}_FILE'.format(_prefix), fallback='locucion') if _has_voice else 'locucion'
+        _voice_data['{}_TG'.format(_prefix)] = voice_config.getint(_voice_section, '{}_TG'.format(_prefix), fallback=9) if _has_voice else 9
+        _voice_data['{}_MODE'.format(_prefix)] = voice_config.get(_voice_section, '{}_MODE'.format(_prefix), fallback='hourly') if _has_voice else 'hourly'
+        _voice_data['{}_INTERVAL'.format(_prefix)] = voice_config.getint(_voice_section, '{}_INTERVAL'.format(_prefix), fallback=3600) if _has_voice else 3600
+        _voice_data['{}_LANGUAGE'.format(_prefix)] = voice_config.get(_voice_section, '{}_LANGUAGE'.format(_prefix), fallback='es_ES') if _has_voice else 'es_ES'
+
+    _voice_data.update({
         'RECORDING_ENABLED': voice_config.getboolean(_voice_section, 'RECORDING_ENABLED', fallback=False) if _has_voice else False,
         'RECORDING_TG': voice_config.getint(_voice_section, 'RECORDING_TG', fallback=9) if _has_voice else 9,
         'RECORDING_TIMESLOT': voice_config.getint(_voice_section, 'RECORDING_TIMESLOT', fallback=2) if _has_voice else 2,
@@ -444,31 +449,18 @@ def build_config(_config_file):
         'TTS_AMBESERVER_PORT': voice_config.getint(_voice_section, 'TTS_AMBESERVER_PORT', fallback=2460) if _has_voice else 2460,
         'TTS_VOLUME': voice_config.getint(_voice_section, 'TTS_VOLUME', fallback=-3) if _has_voice else -3,
         'TTS_SPEED': voice_config.getfloat(_voice_section, 'TTS_SPEED', fallback=1.0) if _has_voice else 1.0,
-        'TTS_ANNOUNCEMENT1_ENABLED': voice_config.getboolean(_voice_section, 'TTS_ANNOUNCEMENT1_ENABLED', fallback=False) if _has_voice else False,
-        'TTS_ANNOUNCEMENT1_FILE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT1_FILE', fallback='texto1') if _has_voice else 'texto1',
-        'TTS_ANNOUNCEMENT1_TG': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT1_TG', fallback=9) if _has_voice else 9,
-        'TTS_ANNOUNCEMENT1_MODE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT1_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'TTS_ANNOUNCEMENT1_INTERVAL': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT1_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'TTS_ANNOUNCEMENT1_LANGUAGE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT1_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
-        'TTS_ANNOUNCEMENT2_ENABLED': voice_config.getboolean(_voice_section, 'TTS_ANNOUNCEMENT2_ENABLED', fallback=False) if _has_voice else False,
-        'TTS_ANNOUNCEMENT2_FILE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT2_FILE', fallback='texto2') if _has_voice else 'texto2',
-        'TTS_ANNOUNCEMENT2_TG': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT2_TG', fallback=9) if _has_voice else 9,
-        'TTS_ANNOUNCEMENT2_MODE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT2_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'TTS_ANNOUNCEMENT2_INTERVAL': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT2_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'TTS_ANNOUNCEMENT2_LANGUAGE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT2_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
-        'TTS_ANNOUNCEMENT3_ENABLED': voice_config.getboolean(_voice_section, 'TTS_ANNOUNCEMENT3_ENABLED', fallback=False) if _has_voice else False,
-        'TTS_ANNOUNCEMENT3_FILE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT3_FILE', fallback='texto3') if _has_voice else 'texto3',
-        'TTS_ANNOUNCEMENT3_TG': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT3_TG', fallback=9) if _has_voice else 9,
-        'TTS_ANNOUNCEMENT3_MODE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT3_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'TTS_ANNOUNCEMENT3_INTERVAL': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT3_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'TTS_ANNOUNCEMENT3_LANGUAGE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT3_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
-        'TTS_ANNOUNCEMENT4_ENABLED': voice_config.getboolean(_voice_section, 'TTS_ANNOUNCEMENT4_ENABLED', fallback=False) if _has_voice else False,
-        'TTS_ANNOUNCEMENT4_FILE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT4_FILE', fallback='texto4') if _has_voice else 'texto4',
-        'TTS_ANNOUNCEMENT4_TG': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT4_TG', fallback=9) if _has_voice else 9,
-        'TTS_ANNOUNCEMENT4_MODE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT4_MODE', fallback='hourly') if _has_voice else 'hourly',
-        'TTS_ANNOUNCEMENT4_INTERVAL': voice_config.getint(_voice_section, 'TTS_ANNOUNCEMENT4_INTERVAL', fallback=3600) if _has_voice else 3600,
-        'TTS_ANNOUNCEMENT4_LANGUAGE': voice_config.get(_voice_section, 'TTS_ANNOUNCEMENT4_LANGUAGE', fallback='es_ES') if _has_voice else 'es_ES',
     })
+
+    for _tts_num in _tts_nums:
+        _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
+        _voice_data['{}_ENABLED'.format(_prefix)] = voice_config.getboolean(_voice_section, '{}_ENABLED'.format(_prefix), fallback=False) if _has_voice else False
+        _voice_data['{}_FILE'.format(_prefix)] = voice_config.get(_voice_section, '{}_FILE'.format(_prefix), fallback='texto{}'.format(_tts_num)) if _has_voice else 'texto{}'.format(_tts_num)
+        _voice_data['{}_TG'.format(_prefix)] = voice_config.getint(_voice_section, '{}_TG'.format(_prefix), fallback=9) if _has_voice else 9
+        _voice_data['{}_MODE'.format(_prefix)] = voice_config.get(_voice_section, '{}_MODE'.format(_prefix), fallback='hourly') if _has_voice else 'hourly'
+        _voice_data['{}_INTERVAL'.format(_prefix)] = voice_config.getint(_voice_section, '{}_INTERVAL'.format(_prefix), fallback=3600) if _has_voice else 3600
+        _voice_data['{}_LANGUAGE'.format(_prefix)] = voice_config.get(_voice_section, '{}_LANGUAGE'.format(_prefix), fallback='es_ES') if _has_voice else 'es_ES'
+
+    CONFIG['GLOBAL'].update(_voice_data)
 
     return CONFIG
 
@@ -493,7 +485,23 @@ def reload_voice_config(CONFIG, config_file):
 
     _voice_keys = {}
 
-    for _ann_num in range(1, 5):
+    _ann_nums = []
+    _tts_nums = []
+    for _key in voice_config.options(_voice_section):
+        _key_upper = _key.upper()
+        _m = re.match(r'^ANNOUNCEMENT(\d*)_ENABLED$', _key_upper)
+        if _m:
+            _ann_nums.append(1 if _m.group(1) == '' else int(_m.group(1)))
+        _m = re.match(r'^TTS_ANNOUNCEMENT(\d+)_ENABLED$', _key_upper)
+        if _m:
+            _tts_nums.append(int(_m.group(1)))
+    _ann_nums = sorted(set(_ann_nums))
+    _tts_nums = sorted(set(_tts_nums))
+
+    _voice_keys['_ANN_NUMS'] = list(_ann_nums)
+    _voice_keys['_TTS_NUMS'] = list(_tts_nums)
+
+    for _ann_num in _ann_nums:
         _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
         _voice_keys['{}_ENABLED'.format(_prefix)] = voice_config.getboolean(_voice_section, '{}_ENABLED'.format(_prefix), fallback=False)
         _voice_keys['{}_FILE'.format(_prefix)] = voice_config.get(_voice_section, '{}_FILE'.format(_prefix), fallback='locucion')
@@ -514,7 +522,7 @@ def reload_voice_config(CONFIG, config_file):
     _voice_keys['TTS_VOLUME'] = voice_config.getint(_voice_section, 'TTS_VOLUME', fallback=-3)
     _voice_keys['TTS_SPEED'] = voice_config.getfloat(_voice_section, 'TTS_SPEED', fallback=1.0)
 
-    for _tts_num in range(1, 5):
+    for _tts_num in _tts_nums:
         _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
         _voice_keys['{}_ENABLED'.format(_prefix)] = voice_config.getboolean(_voice_section, '{}_ENABLED'.format(_prefix), fallback=False)
         _voice_keys['{}_FILE'.format(_prefix)] = voice_config.get(_voice_section, '{}_FILE'.format(_prefix), fallback='texto{}'.format(_tts_num))
@@ -522,6 +530,19 @@ def reload_voice_config(CONFIG, config_file):
         _voice_keys['{}_MODE'.format(_prefix)] = voice_config.get(_voice_section, '{}_MODE'.format(_prefix), fallback='hourly')
         _voice_keys['{}_INTERVAL'.format(_prefix)] = voice_config.getint(_voice_section, '{}_INTERVAL'.format(_prefix), fallback=3600)
         _voice_keys['{}_LANGUAGE'.format(_prefix)] = voice_config.get(_voice_section, '{}_LANGUAGE'.format(_prefix), fallback='es_ES')
+
+    _old_ann = CONFIG['GLOBAL'].get('_ANN_NUMS', [])
+    for _old_num in _old_ann:
+        if _old_num not in _ann_nums:
+            _old_prefix = 'ANNOUNCEMENT' if _old_num == 1 else 'ANNOUNCEMENT{}'.format(_old_num)
+            for _sfx in ('_ENABLED', '_FILE', '_TG', '_MODE', '_INTERVAL', '_LANGUAGE'):
+                CONFIG['GLOBAL'].pop('{}{}'.format(_old_prefix, _sfx), None)
+    _old_tts = CONFIG['GLOBAL'].get('_TTS_NUMS', [])
+    for _old_num in _old_tts:
+        if _old_num not in _tts_nums:
+            _old_prefix = 'TTS_ANNOUNCEMENT{}'.format(_old_num)
+            for _sfx in ('_ENABLED', '_FILE', '_TG', '_MODE', '_INTERVAL', '_LANGUAGE'):
+                CONFIG['GLOBAL'].pop('{}{}'.format(_old_prefix, _sfx), None)
 
     CONFIG['GLOBAL'].update(_voice_keys)
     return True

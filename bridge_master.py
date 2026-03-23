@@ -43,7 +43,7 @@ import importlib.util
 import re
 import copy
 from setproctitle import setproctitle
-from collections import deque
+from collections import deque, defaultdict
 from random import randint
 import secrets
 
@@ -907,11 +907,11 @@ def ident():
                     _pkt_time = time()
                     reactor.callFromThread(sendVoicePacket,systems[system],pkt,_source_id,_dst_id,_slot)
 
-_announcement_last_hour = {1: -1, 2: -1, 3: -1, 4: -1}
-_announcement_running = {1: False, 2: False, 3: False, 4: False}
+_announcement_last_hour = defaultdict(lambda: -1)
+_announcement_running = defaultdict(bool)
 
-_tts_last_hour = {1: -1, 2: -1, 3: -1, 4: -1}
-_tts_running = {1: False, 2: False, 3: False, 4: False}
+_tts_last_hour = defaultdict(lambda: -1)
+_tts_running = defaultdict(bool)
 
 _voice_cfg_mtime = 0
 _voice_cfg_file = ''
@@ -1299,7 +1299,16 @@ def _checkVoiceConfigReload():
         logger.error('(VOICE-RELOAD) Error recargando voice.cfg')
         return
 
-    for _ann_num in range(1, 5):
+    _active_ann_nums = set(CONFIG['GLOBAL'].get('_ANN_NUMS', []))
+    for _ann_num in list(_ann_tasks.keys()):
+        if _ann_num not in _active_ann_nums:
+            if _ann_tasks[_ann_num].running:
+                _ann_tasks[_ann_num].stop()
+            _old_label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
+            logger.info('(VOICE-RELOAD) %s eliminada (ya no existe en voice.cfg)', _old_label)
+            del _ann_tasks[_ann_num]
+
+    for _ann_num in _active_ann_nums:
         _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
         _label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
         _enabled = CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False)
@@ -1324,7 +1333,15 @@ def _checkVoiceConfigReload():
                          CONFIG['GLOBAL']['{}_FILE'.format(_prefix)],
                          CONFIG['GLOBAL']['{}_TG'.format(_prefix)])
 
-    for _tts_num in range(1, 5):
+    _active_tts_nums = set(CONFIG['GLOBAL'].get('_TTS_NUMS', []))
+    for _tts_num in list(_tts_tasks.keys()):
+        if _tts_num not in _active_tts_nums:
+            if _tts_tasks[_tts_num].running:
+                _tts_tasks[_tts_num].stop()
+            logger.info('(VOICE-RELOAD) TTS-%s eliminada (ya no existe en voice.cfg)', _tts_num)
+            del _tts_tasks[_tts_num]
+
+    for _tts_num in _active_tts_nums:
         _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
         _label = 'TTS-{}'.format(_tts_num)
         _enabled = CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False)
@@ -3835,10 +3852,10 @@ if __name__ == '__main__':
     killserver = killserver_task.start(5)
     killserver.addErrback(loopingErrHandle)
 
-    for _ann_num in range(1, 5):
+    for _ann_num in CONFIG['GLOBAL'].get('_ANN_NUMS', []):
         _prefix = 'ANNOUNCEMENT' if _ann_num == 1 else 'ANNOUNCEMENT{}'.format(_ann_num)
         _label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
-        if CONFIG['GLOBAL']['{}_ENABLED'.format(_prefix)]:
+        if CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False):
             _ann_mode = CONFIG['GLOBAL']['{}_MODE'.format(_prefix)]
             if _ann_mode == 'hourly':
                 _ann_check_interval = 30
@@ -3857,7 +3874,7 @@ if __name__ == '__main__':
             if _ann_mode == 'interval':
                 logger.info('(%s) Interval: every %s seconds', _label, _ann_check_interval)
 
-    for _tts_num in range(1, 5):
+    for _tts_num in CONFIG['GLOBAL'].get('_TTS_NUMS', []):
         _prefix = 'TTS_ANNOUNCEMENT{}'.format(_tts_num)
         _label = 'TTS-{}'.format(_tts_num)
         if CONFIG['GLOBAL'].get('{}_ENABLED'.format(_prefix), False):

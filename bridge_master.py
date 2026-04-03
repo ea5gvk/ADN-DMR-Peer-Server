@@ -1101,7 +1101,7 @@ def _announcementSendBroadcast(_targets, _pkts_by_ts, _pkt_idx, _source_id, _dst
     _label = 'LOCUCION' if _ann_num == 1 else 'LOCUCION-{}'.format(_ann_num)
     
     _total_pkts = len(_pkts_by_ts[1])
-    if _pkt_idx >= _total_pkts:
+    if _pkt_idx >= _total_pkts or not _targets:
         _mark_slots_free(_targets)
         for _t in _targets:
             try:
@@ -1111,12 +1111,30 @@ def _announcementSendBroadcast(_targets, _pkts_by_ts, _pkt_idx, _source_id, _dst
             except:
                 pass
         _announcement_running[_ann_num] = False
-        logger.info('(%s) Broadcast complete: %s packets sent to %s targets', _label, _total_pkts, len(_targets))
+        if not _targets:
+            logger.info('(%s) Broadcast aborted at packet %s/%s: all targets removed (QSO collision)', _label, _pkt_idx, _total_pkts)
+        else:
+            logger.info('(%s) Broadcast complete: %s packets sent to %s targets', _label, _total_pkts, len(_targets))
         _broadcast_finished(_tg)
         return
     
     _now = time()
     
+    _collided = []
+    for _t in _targets:
+        _slot = _t['slot']
+        if _slot['RX_TYPE'] != HBPF_SLT_VTERM:
+            logger.info('(%s) QSO detected on %s/TS%s during broadcast (packet %s/%s), removing target', _label, _t['name'], _t['ts'], _pkt_idx, _total_pkts)
+            _slot['TX_TYPE'] = HBPF_SLT_VTERM
+            _collided.append(_t)
+    for _t in _collided:
+        _targets.remove(_t)
+    if not _targets:
+        _announcement_running[_ann_num] = False
+        logger.info('(%s) Broadcast stopped: all targets had QSO collision at packet %s/%s', _label, _pkt_idx, _total_pkts)
+        _broadcast_finished(_tg)
+        return
+
     for _t in _targets:
         try:
             _sys_obj = _t['sys_obj']
@@ -1176,7 +1194,6 @@ def scheduledAnnouncement(_ann_num=1, _retry=0):
             return
         if _now.hour == _announcement_last_hour[_ann_num]:
             return
-        _announcement_last_hour[_ann_num] = _now.hour
     
     _tg = CONFIG['GLOBAL']['{}_TG'.format(_prefix)]
     if str(_tg) in _broadcast_active_tgs and _retry < 60:
@@ -1209,6 +1226,7 @@ def scheduledAnnouncement(_ann_num=1, _retry=0):
     
     _excluded = ['ECHO', 'D-APRS']
     _targets = []
+    _busy_count = 0
     
     for _sn in list(systems.keys()):
         if _sn in _excluded or any(_sn.startswith(ex + '-') for ex in _excluded):
@@ -1248,7 +1266,8 @@ def scheduledAnnouncement(_ann_num=1, _retry=0):
             _slot_index = 2 if _ts == 2 else 1
             _slot = systems[_sn].STATUS[_slot_index]
             if (_slot['RX_TYPE'] != HBPF_SLT_VTERM) or (_slot['TX_TYPE'] != HBPF_SLT_VTERM):
-                logger.debug('(%s) System %s TS%s busy, skipping', _label, _sn, _ts)
+                logger.debug('(%s) System %s TS%s busy (QSO active), skipping', _label, _sn, _ts)
+                _busy_count += 1
                 continue
             
             _targets.append({
@@ -1259,9 +1278,17 @@ def scheduledAnnouncement(_ann_num=1, _retry=0):
             })
     
     if not _targets:
+        if _busy_count > 0 and _retry < 60:
+            if _retry == 0:
+                logger.info('(%s) All %s target slots busy (QSO active), waiting for QSO to finish...', _label, _busy_count)
+            reactor.callLater(5.0, scheduledAnnouncement, _ann_num, _retry + 1)
+            return
         logger.info('(%s) No systems with active bridge for TG %s to send to', _label, _tg)
         return
     
+    if _mode == 'hourly':
+        _announcement_last_hour[_ann_num] = datetime.now().hour
+
     _pkts_by_ts = {
         1: list(pkt_gen(_source_id, _dst_id, _peer_id, 0, _say)),
         2: list(pkt_gen(_source_id, _dst_id, _peer_id, 1, _say)),
@@ -1391,7 +1418,6 @@ def scheduledTTSAnnouncement(_tts_num=1, _retry=0):
             return
         if _now.hour == _tts_last_hour[_tts_num]:
             return
-        _tts_last_hour[_tts_num] = _now.hour
 
     _tg = CONFIG['GLOBAL']['{}_TG'.format(_prefix)]
     if str(_tg) in _broadcast_active_tgs and _retry < 60:
@@ -1454,6 +1480,7 @@ def _ttsConversionDone(_ambe_path, _tts_num, _file, _tg, _lang, _mode, _label, _
 
     _excluded = ['ECHO', 'D-APRS']
     _targets = []
+    _busy_count = 0
 
     for _sn in list(systems.keys()):
         if _sn in _excluded or any(_sn.startswith(ex + '-') for ex in _excluded):
@@ -1493,7 +1520,8 @@ def _ttsConversionDone(_ambe_path, _tts_num, _file, _tg, _lang, _mode, _label, _
             _slot_index = 2 if _ts == 2 else 1
             _slot = systems[_sn].STATUS[_slot_index]
             if (_slot['RX_TYPE'] != HBPF_SLT_VTERM) or (_slot['TX_TYPE'] != HBPF_SLT_VTERM):
-                logger.debug('(%s) System %s TS%s busy, skipping', _label, _sn, _ts)
+                logger.debug('(%s) System %s TS%s busy (QSO active), skipping', _label, _sn, _ts)
+                _busy_count += 1
                 continue
 
             _targets.append({
@@ -1505,9 +1533,17 @@ def _ttsConversionDone(_ambe_path, _tts_num, _file, _tg, _lang, _mode, _label, _
             logger.debug('(%s) System %s added for TG %s TS%s', _label, _sn, _tg, _ts)
 
     if not _targets:
+        if _busy_count > 0 and _retry < 60:
+            if _retry == 0:
+                logger.info('(%s) All %s target slots busy (QSO active), waiting for QSO to finish...', _label, _busy_count)
+            reactor.callLater(5.0, _ttsConversionDone, _ambe_path, _tts_num, _file, _tg, _lang, _mode, _label, _retry + 1)
+            return
         _tts_running[_tts_num] = False
         logger.info('(%s) No systems with active bridge for TG %s to send to', _label, _tg)
         return
+
+    if _mode == 'hourly':
+        _tts_last_hour[_tts_num] = datetime.now().hour
 
     _pkts_by_ts = {
         1: list(pkt_gen(_source_id, _dst_id, _peer_id, 0, _say)),
@@ -1535,7 +1571,7 @@ def _ttsSendBroadcast(_targets, _pkts_by_ts, _pkt_idx, _source_id, _dst_id, _tg,
     _label = 'TTS-{}'.format(_tts_num)
 
     _total_pkts = len(_pkts_by_ts[1])
-    if _pkt_idx >= _total_pkts:
+    if _pkt_idx >= _total_pkts or not _targets:
         _mark_slots_free(_targets)
         for _t in _targets:
             try:
@@ -1545,11 +1581,29 @@ def _ttsSendBroadcast(_targets, _pkts_by_ts, _pkt_idx, _source_id, _dst_id, _tg,
             except:
                 pass
         _tts_running[_tts_num] = False
-        logger.info('(%s) Broadcast complete: %s packets sent to %s targets', _label, _total_pkts, len(_targets))
+        if not _targets:
+            logger.info('(%s) Broadcast aborted at packet %s/%s: all targets removed (QSO collision)', _label, _pkt_idx, _total_pkts)
+        else:
+            logger.info('(%s) Broadcast complete: %s packets sent to %s targets', _label, _total_pkts, len(_targets))
         _broadcast_finished(_tg)
         return
 
     _now = time()
+
+    _collided = []
+    for _t in _targets:
+        _slot = _t['slot']
+        if _slot['RX_TYPE'] != HBPF_SLT_VTERM:
+            logger.info('(%s) QSO detected on %s/TS%s during broadcast (packet %s/%s), removing target', _label, _t['name'], _t['ts'], _pkt_idx, _total_pkts)
+            _slot['TX_TYPE'] = HBPF_SLT_VTERM
+            _collided.append(_t)
+    for _t in _collided:
+        _targets.remove(_t)
+    if not _targets:
+        _tts_running[_tts_num] = False
+        logger.info('(%s) Broadcast stopped: all targets had QSO collision at packet %s/%s', _label, _pkt_idx, _total_pkts)
+        _broadcast_finished(_tg)
+        return
 
     for _t in _targets:
         try:

@@ -302,7 +302,7 @@ def reset_static_tg(tg,ts,_tmout,system):
 
 def reset_all_reflector_system(_tmout,system):
     for system in CONFIG['SYSTEMS']:
-        for bridge in BRIDGES:
+        for bridge in list(BRIDGES):
             if bridge[0:1] == '#':
                 for bridgesystem in BRIDGES[bridge]:
                     bridgetemp = deque()
@@ -1810,7 +1810,7 @@ def options_config():
                     if int(_options['DEFAULT_UA_TIMER']) != CONFIG['SYSTEMS'][_system]['DEFAULT_UA_TIMER']:
                         logger.debug('(OPTIONS) %s Updating DEFAULT_UA_TIMER for existing bridges.',_system)
                         remove_bridge_system(_system)
-                        for _bridge in BRIDGES:
+                        for _bridge in list(BRIDGES):
                             ts1 = False 
                             ts2 = False
                             for i,e in enumerate(BRIDGES[_bridge]):
@@ -2482,7 +2482,7 @@ class routerOBP(OPENBRIDGE):
                     make_stat_bridge(_dst_id)
             
             _sysIgnore = deque()
-            for _bridge in BRIDGES:
+            for _bridge in list(BRIDGES):
                     for _system in BRIDGES[_bridge]:
                         
                         if _system['SYSTEM'] == self._system and _system['TGID'] == _dst_id and _system['TS'] == _slot and _system['ACTIVE'] == True:
@@ -3400,7 +3400,7 @@ class routerHBP(HBSYSTEM):
 
             # Now, run the general routing loop for all other bridges to handle cross-connections.
             # We skip the one we just processed to avoid duplicate work.
-            for _bridge in BRIDGES:
+            for _bridge in list(BRIDGES):
                 if _bridge == _current_bridge_key:
                     continue
                 for _system in BRIDGES[_bridge]:
@@ -3429,7 +3429,7 @@ class routerHBP(HBSYSTEM):
                 #
 
                 # Iterate the rules dictionary
-                for _bridge in BRIDGES:
+                for _bridge in list(BRIDGES):
                     if (_bridge[0:1] == '#') and (_int_dst_id != 9):
                         continue
                     for _system in BRIDGES[_bridge]:

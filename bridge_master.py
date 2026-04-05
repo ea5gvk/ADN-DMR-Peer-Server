@@ -337,6 +337,8 @@ def remove_bridge_system(system):
     _bridgestemp = {}
     _bridgetemp = {}
     for _bridge in list(BRIDGES):
+        if _bridge not in BRIDGES:
+            continue
         for _bridgesystem in BRIDGES[_bridge]:
             if _bridgesystem['SYSTEM'] != system:
                 if _bridge not in _bridgestemp:
@@ -352,6 +354,8 @@ def remove_bridge_system(system):
 def deactivate_all_dynamic_bridges(system_name):
     """Desactiva todos los bridges dinámicos (no estáticos, no reflectores) de un sistema."""
     for _bridge in list(BRIDGES):
+        if _bridge not in BRIDGES:
+            continue
         if _bridge[0:1] == '#':  # Saltar reflectores
             continue
         for _sys_entry in BRIDGES[_bridge]:
@@ -373,6 +377,8 @@ def rule_timer_loop():
     _debug_msgs = []
     
     for _bridge in list(BRIDGES):
+        if _bridge not in BRIDGES:
+            continue
         _bridge_used = False
         
         ### MODIFIED: Detect special TGIDs (9990-9999) to exclude them from infinite timer logic
@@ -471,6 +477,8 @@ def statTrimmer():
     logger.debug('(ROUTER) STAT trimmer loop started')
     _remove_bridges = deque()
     for _bridge in list(BRIDGES):
+        if _bridge not in BRIDGES:
+            continue
         _bridge_stat = False
         _in_use = False
         for _system in BRIDGES[_bridge]:
@@ -531,6 +539,8 @@ def bridgeDebug():
             #_setbridge = str(times[bridgetmout])
             if CONFIG['SYSTEMS'][system]['MODE'] == 'MASTER':
                 for _bridge in set(times.values()):
+                    if _bridge not in BRIDGES:
+                        continue
                     logger.warning('(BRIDGEDEBUG) deactivating system: %s for bridge: %s',system,_bridge)
                     bridgetemp = deque()
                     for bridgesystem in BRIDGES[_bridge]:
@@ -1811,6 +1821,8 @@ def options_config():
                         logger.debug('(OPTIONS) %s Updating DEFAULT_UA_TIMER for existing bridges.',_system)
                         remove_bridge_system(_system)
                         for _bridge in list(BRIDGES):
+                            if _bridge not in BRIDGES:
+                                continue
                             ts1 = False 
                             ts2 = False
                             for i,e in enumerate(BRIDGES[_bridge]):
@@ -2483,6 +2495,8 @@ class routerOBP(OPENBRIDGE):
             
             _sysIgnore = deque()
             for _bridge in list(BRIDGES):
+                    if _bridge not in BRIDGES:
+                        continue
                     for _system in BRIDGES[_bridge]:
                         
                         if _system['SYSTEM'] == self._system and _system['TGID'] == _dst_id and _system['TS'] == _slot and _system['ACTIVE'] == True:
@@ -3401,6 +3415,8 @@ class routerHBP(HBSYSTEM):
             # Now, run the general routing loop for all other bridges to handle cross-connections.
             # We skip the one we just processed to avoid duplicate work.
             for _bridge in list(BRIDGES):
+                if _bridge not in BRIDGES:
+                    continue
                 if _bridge == _current_bridge_key:
                     continue
                 for _system in BRIDGES[_bridge]:
@@ -3430,6 +3446,8 @@ class routerHBP(HBSYSTEM):
 
                 # Iterate the rules dictionary
                 for _bridge in list(BRIDGES):
+                    if _bridge not in BRIDGES:
+                        continue
                     if (_bridge[0:1] == '#') and (_int_dst_id != 9):
                         continue
                     for _system in BRIDGES[_bridge]:

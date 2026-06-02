@@ -159,6 +159,9 @@ def build_config(_config_file):
                     'VALIDATE_SERVER_IDS': config.getboolean(section, 'VALIDATE_SERVER_IDS', fallback=True),
                     'DEBUG_BRIDGES' : config.getboolean(section, 'DEBUG_BRIDGES', fallback=False),
                     'ENABLE_API' : config.getboolean(section, 'ENABLE_API', fallback=False),
+                    'TALKER_ALIAS': config.getboolean(section, 'TALKER_ALIAS', fallback=False),
+                    'TALKER_ALIAS_MODE': config.get(section, 'TALKER_ALIAS_MODE', fallback='both'),
+                    'TALKER_ALIAS_FORMAT': config.get(section, 'TALKER_ALIAS_FORMAT', fallback='{callsign} {fname}'),
                 })
                 if not CONFIG['GLOBAL']['ANNOUNCEMENT_LANGUAGES']:
                     CONFIG['GLOBAL']['ANNOUNCEMENT_LANGUAGES'] = languages

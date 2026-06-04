@@ -839,11 +839,21 @@ def threadAlias():
 
 def setAlias(_peer_ids,_subscriber_ids, _talkgroup_ids, _local_subscriber_ids, _server_ids, _checksums):
     peer_ids, subscriber_ids, talkgroup_ids,local_subscriber_ids,server_ids,checksums = _peer_ids, _subscriber_ids, _talkgroup_ids, _local_subscriber_ids,_server_ids,_checksums
-    # Build Talker Alias subscriber profiles (id -> {callsign}) for inject mode
+    # Build Talker Alias subscriber profiles for inject mode. Prefer full
+    # profiles (callsign + fname/surname/city/...) parsed from the subscriber
+    # file so templates like '{callsign} {fname} {city}' work; fall back to a
+    # callsign-only map from the in-memory id->callsign dictionary.
     try:
-        CONFIG['_TA_PROFILES'] = {rid: {'callsign': cs} for rid, cs in (_subscriber_ids or {}).items()}
+        _ta_path = CONFIG['ALIASES']['PATH'] + CONFIG['ALIASES']['SUBSCRIBER_FILE']
+        _ta_profiles = ta.load_ta_profiles(_ta_path)
+        if not _ta_profiles:
+            _ta_profiles = {rid: {'callsign': cs} for rid, cs in (_subscriber_ids or {}).items()}
+        CONFIG['_TA_PROFILES'] = _ta_profiles
     except Exception:
-        CONFIG['_TA_PROFILES'] = {}
+        try:
+            CONFIG['_TA_PROFILES'] = {rid: {'callsign': cs} for rid, cs in (_subscriber_ids or {}).items()}
+        except Exception:
+            CONFIG['_TA_PROFILES'] = {}
     
 def aliasb():
     _peer_ids, _subscriber_ids, _talkgroup_ids, _local_subscriber_ids, _server_ids, _checksums = mk_aliases(CONFIG)

@@ -246,13 +246,20 @@ def _encode_emblc(_lc):
     return {1: out[0:32], 2: out[32:64], 3: out[64:96], 4: out[96:128]}
 
 
-def encode_talker_alias_emblc(text, text_format='utf8'):
-    """Embedded-LC dicts for TA blocks 0..N-1 plus block count N (1-4)."""
-    encoded = encode_ta_buffer(text, text_format)
-    blocks = blocks_from_buffer(encoded)
-    count = required_ta_block_count(encoded)
-    emblcs = [_encode_emblc(talker_alias_lc_bytes(i, blocks[i])) for i in range(count)]
-    return emblcs, count
+def encode_talker_alias_emblc(text, text_formats=('utf8',)):
+    """Embedded-LC dicts for the TA blocks. `text_formats` may be a single
+    encoding or several; with several, the TA is emitted in each encoding back to
+    back (e.g. UTF-8 then ISO-8859-1) so radios of different vendors each pick up
+    the format they support. Returns (list-of-emblc-dicts, total-count)."""
+    if isinstance(text_formats, str):
+        text_formats = [text_formats]
+    emblcs = []
+    for tf in (list(text_formats) or ['utf8']):
+        encoded = encode_ta_buffer(text, tf)
+        blocks = blocks_from_buffer(encoded)
+        cnt = required_ta_block_count(encoded)
+        emblcs += [_encode_emblc(talker_alias_lc_bytes(i, blocks[i])) for i in range(cnt)]
+    return emblcs, len(emblcs)
 
 
 def encode_talker_alias_emblc_from_blocks(blocks):
@@ -313,10 +320,14 @@ def ta_settings(CONFIG, system_name=None):
     tfmt = sys_cfg.get('TALKER_ALIAS_TEXT_FORMAT')
     if tfmt is None:
         tfmt = g.get('TALKER_ALIAS_TEXT_FORMAT', 'utf8')
-    tfmt = str(tfmt).lower()
-    if tfmt not in ('utf8', 'iso8', '7bit'):
-        tfmt = 'utf8'
-    return {'enabled': bool(enabled), 'mode': mode, 'format': str(fmt), 'text_format': tfmt}
+    # comma-separated list -> emit the TA in each encoding back to back, so radios
+    # of different vendors each pick up the format they support (e.g. 'utf8,iso8'
+    # for Motorola + Hytera coexistence).
+    formats = [f.strip().lower() for f in str(tfmt).split(',')]
+    formats = [f for f in formats if f in ('utf8', 'iso8', '7bit')]
+    if not formats:
+        formats = ['utf8']
+    return {'enabled': bool(enabled), 'mode': mode, 'format': str(fmt), 'text_formats': formats}
 
 
 def ta_enabled(CONFIG, system_name=None):
@@ -404,13 +415,13 @@ def resolve_ta(CONFIG, system_name, rf_src, blocks):
                 'text': decode_ta(buffer_from_blocks(blocks))}
     if mode == 'inject':
         return {'source': 'inject', 'blocks': None,
-                'text': format_ta_text(CONFIG, rf_src), 'text_format': settings['text_format']}
+                'text': format_ta_text(CONFIG, rf_src), 'text_formats': settings['text_formats']}
     # both
     if have_passthrough:
         return {'source': 'passthrough', 'blocks': dict(blocks),
                 'text': decode_ta(buffer_from_blocks(blocks))}
     return {'source': 'inject', 'blocks': None,
-            'text': format_ta_text(CONFIG, rf_src), 'text_format': settings['text_format']}
+            'text': format_ta_text(CONFIG, rf_src), 'text_formats': settings['text_formats']}
 
 
 def ta_dmra_packets(rf_src, resolved):
@@ -419,7 +430,7 @@ def ta_dmra_packets(rf_src, resolved):
         return []
     if resolved['source'] == 'passthrough':
         return passthrough_packets_from_blocks(rf_src, resolved['blocks'])
-    return build_dmra_packets(rf_src, resolved['text'], resolved.get('text_format', 'utf8'))
+    return build_dmra_packets(rf_src, resolved['text'], (resolved.get('text_formats') or ['utf8'])[0])
 
 
 def ta_emblc(resolved):
@@ -428,7 +439,7 @@ def ta_emblc(resolved):
         return None
     if resolved['source'] == 'passthrough':
         return encode_talker_alias_emblc_from_blocks(resolved['blocks'])
-    return encode_talker_alias_emblc(resolved['text'], resolved.get('text_format', 'utf8'))
+    return encode_talker_alias_emblc(resolved['text'], resolved.get('text_formats', ['utf8']))
 
 
 # ---------------------------------------------------------------------------

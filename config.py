@@ -162,6 +162,7 @@ def build_config(_config_file):
                     'TALKER_ALIAS': config.getboolean(section, 'TALKER_ALIAS', fallback=False),
                     'TALKER_ALIAS_MODE': config.get(section, 'TALKER_ALIAS_MODE', fallback='both'),
                     'TALKER_ALIAS_FORMAT': config.get(section, 'TALKER_ALIAS_FORMAT', fallback='{callsign} {fname}'),
+                    'TALKER_ALIAS_TEXT_FORMAT': config.get(section, 'TALKER_ALIAS_TEXT_FORMAT', fallback='utf8'),
                 })
                 if not CONFIG['GLOBAL']['ANNOUNCEMENT_LANGUAGES']:
                     CONFIG['GLOBAL']['ANNOUNCEMENT_LANGUAGES'] = languages

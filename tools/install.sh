@@ -323,7 +323,7 @@ EOF
     systemctl enable adn-monitor >/dev/null
     systemctl restart adn-monitor
     for _ in $(seq 1 30); do
-        curl -fsS -o /dev/null "http://127.0.0.1:$api_port/api/health" && return 0
+        curl -fs -o /dev/null "http://127.0.0.1:$api_port/api/health" && return 0
         sleep 2
     done
     warn "La API del dashboard no responde todavía en 127.0.0.1:$api_port (journalctl -u adn-monitor)."

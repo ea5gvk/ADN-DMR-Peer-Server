@@ -48,6 +48,7 @@ import time
 from typing import Any
 
 from ...domain import HBPF_SLT_VTERM, int_id
+from ..trunking.config import system_is_trunking
 from .helpers import obp_clear_deferred_bridge_tx_leg
 from .loop_guard import loop_guard
 
@@ -363,7 +364,9 @@ class RoutingTimerMixin:
                     for sid, leg in list(tx_streams.items()):
                         if not isinstance(leg, dict):
                             continue
-                        if leg.get("TX_TYPE") != HBPF_SLT_VTERM and leg.get("TX_TIME", 0) < now - 5:
+                        # A terminator pops its leg: one still here lost it (its last frame may be
+                        # voice burst C, whose vseq has the terminator's value).
+                        if leg.get("TX_TIME", 0) < now - 5:
                             logger.debug(
                                 "(%s) *TIME OUT*  TX STREAM ID: %s SUB: %s TGID %s, TS %s, Duration: %.2f",
                                 system_name, int_id(sid), int_id(leg.get("TX_RFS", b"")),
@@ -459,6 +462,9 @@ class RoutingTimerMixin:
                 self.acl_check,
                 now,
             )
+            # A site may have logged in again and subscribed before this reset ran.
+            if system_is_trunking(sys_cfg):
+                self.trunk_resync(system_name)
             sys_cfg["_reset"] = False
             sys_cfg["_resetlog"] = False
     def _restore_prohibited_static_bridge_legs(self, system_name: str) -> None:

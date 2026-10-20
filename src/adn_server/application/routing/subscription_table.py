@@ -53,6 +53,7 @@ from ...domain.config_coerce import coerce_bool, parse_options_single
 from ...domain.dynamic_tg import DynamicTgEntry
 from ...domain.hbp_protocol import normalize_fixed_width_ascii
 from ..proxy.deployment import is_proxy_inject_only
+from ..trunking.config import system_is_trunking
 
 logger = logging.getLogger(__name__)
 
@@ -187,15 +188,17 @@ class SubscriptionTableMixin:
         """Legacy startup: set default reflectors and static TGs for each MASTER system."""
         prohibited_tgs = (0, 1, 2, 3, 4, 5, 9, 9990, 9991, 9992, 9993, 9994, 9995, 9996, 9997, 9998, 9999)
         logger.debug("(ROUTER) Setting default reflectors")
+        # A trunking MASTER has no reflector, statics or OPTIONS: its TGs are its sites'
+        # subscriptions, re-applied last.
         for system, sys_cfg in self._config.get("SYSTEMS", {}).items():
-            if sys_cfg.get("MODE") != "MASTER":
+            if sys_cfg.get("MODE") != "MASTER" or system_is_trunking(sys_cfg):
                 continue
             default_ref = int(sys_cfg.get("DEFAULT_REFLECTOR", 0))
             if default_ref not in prohibited_tgs:
                 self.make_default_reflector(default_ref, float(sys_cfg.get("DEFAULT_UA_TIMER", 10)), system)
         logger.debug("(ROUTER) setting static TGs")
         for system, sys_cfg in self._config.get("SYSTEMS", {}).items():
-            if sys_cfg.get("MODE") != "MASTER":
+            if sys_cfg.get("MODE") != "MASTER" or system_is_trunking(sys_cfg):
                 continue
             tmout = float(sys_cfg.get("DEFAULT_UA_TIMER", 10))
             ts1_raw = sys_cfg.get("TS1_STATIC") or ""
@@ -223,7 +226,10 @@ class SubscriptionTableMixin:
                 continue
             if not sys_cfg.get("ENABLED", True):
                 continue
-            self.options_config_for_system(system)
+            if system_is_trunking(sys_cfg):
+                self.trunk_resync(system)
+            else:
+                self.options_config_for_system(system)
         self._sync_subscription_store()
 
     def _first_connected_peer_options(self, system_name: str) -> bytes | str | None:
@@ -505,7 +511,7 @@ class SubscriptionTableMixin:
         prohibited_tgs = (0, 1, 2, 3, 4, 5, 9, 9990, 9991, 9992, 9993, 9994, 9995, 9996, 9997, 9998, 9999)
         systems_cfg = self._config.get("SYSTEMS", {})
         sys_cfg = systems_cfg.get(system_name, {})
-        if sys_cfg.get("MODE") != "MASTER":
+        if sys_cfg.get("MODE") != "MASTER" or system_is_trunking(sys_cfg):
             return
         try:
             runtime_source: bytes | str | None = peer_options
@@ -776,8 +782,8 @@ class SubscriptionTableMixin:
         systems_cfg = self._config.get("SYSTEMS", {})
         for _system in systems_cfg:
             sys_cfg = systems_cfg.get(_system, {})
-            if sys_cfg.get("MODE") != "MASTER":
-                continue
+            if sys_cfg.get("MODE") != "MASTER" or system_is_trunking(sys_cfg):
+                continue  # a trunking MASTER's legs are TRUNK legs, never static
             if not sys_cfg.get("ENABLED", True):
                 continue
             parsed = self._merged_static_tg_lists_for_master(_system)

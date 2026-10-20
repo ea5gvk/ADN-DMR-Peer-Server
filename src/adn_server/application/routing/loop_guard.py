@@ -211,6 +211,10 @@ def _last_activity(leg: _Leg, protocols: dict[str, Any], config: dict[str, Any])
         if not isinstance(st, dict):
             return None
         return float(st.get("LAST", st.get("START", leg.start)) or leg.start)
+    rows = getattr(protocols.get(leg.system), "TRUNK_RX", None)
+    row = rows.get(leg.stream_id) if isinstance(rows, dict) else None
+    if isinstance(row, dict):  # a Tier III site's stream has its own row, not the slot
+        return float(row.get("RX_TIME", leg.start) or leg.start)
     slot_st = status.get(leg.slot)
     if not isinstance(slot_st, dict) or slot_st.get("RX_STREAM_ID") != leg.stream_id:
         return None  # the slot moved on to another stream: the original ended a while ago

@@ -30,7 +30,8 @@ Use the project interpreter, e.g. `/opt/.pyenv/versions/3.11.8/bin/python3`.
 | `fakes/` | Re-exports for application tests (`InMemorySubscriptionStore` shim) — not run as tests |
 | `infrastructure/` | Logging reload, ACL router, **HBP REPEAT + proxy fan-in integration**, MQTT |
 | `smoke/` | Quick routing smoke |
-| `support/` | Shared stacks (`hbp_repeat_stack`, monitor sim) — not run as tests |
+| `trunking/` | DMR Tier III: DMRT codec against dmrtc's wire format, trunking registry, DMRT signalling use cases, DTC* login and DMRT on the real HBP MASTER, `TRUNKING` flag (validation, reload), TRUNK store legs, downlink to the sites (71-byte DMRD) and uplink from them (per-stream RX rows) |
+| `support/` | Shared stacks (`hbp_repeat_stack`, monitor sim, `dmrtc_wire` Tier III client mirror, `trunk_site_stack` Tier III sites on real MASTERs, `TrunkRoutingStack` with routing as bootstrap wires it) — not run as tests |
 | `harness/` | Shared fakes (`DeterministicScenario`, assertions) — not run as tests |
 
 ## Integration vs harness
@@ -104,6 +105,24 @@ Scheduled announcements, TTS and beacons are tested with their plugin: `plugins/
 | `test_format.py` | 2 | Format from subscriber profile |
 | `test_mmdvm_wire.py` | 10 | MMDVM wire blocks |
 | `test_passthrough.py` | 9 | Passthrough / both modes |
+
+### trunking/
+
+| File | Tests | Topic |
+|------|-------|-------|
+| `test_trunk_dmrt_codec.py` | 89 | DMRT parse/build vs dmrtc builders and parsers, call UUID, TG validity |
+| `test_trunk_registry.py` | 15 | MS locations, roaming, per-site TGs, stream UUIDs, pendings, echo, drop/TTL |
+| `test_trunk_signalling.py` | 52 | Every DMRT opcode: registration/ACL, subscriptions, UDT, private call, status, malformed |
+| `test_trunk_config_flag.py` | 9 | `system_is_trunking` |
+| `test_trunk_login.py` | 25 | DTC* login / keepalive / close on the real MASTER, classic RPT* refused, DTCCL on timeout and dereg |
+| `test_trunk_dmrt_ingress.py` | 11 | DMRT in by address, answers written to the right site, `send_trunking_message` guards |
+| `test_trunk_config_validation.py` | 22 | `TRUNKING` validator rules, example yaml block |
+| `test_trunk_config_reload.py` | 3 | SIGHUP flipping `TRUNKING`: remove + add; same flag keeps the protocol |
+| `test_trunk_legs.py` | 17 | TRUNK legs follow the subscriptions; immune to rule timers, in-band SINGLE / TG 4000, OPTIONS, SIGHUP; BRIDGERESET resync |
+| `test_trunk_egress.py` | 13 | DMRD the trunking MASTER writes: subscribed / echo (kept while the playback lasts) / registered site only, 71 bytes with the stream UUID, no hotspot gates; site to site only once routing accepts |
+| `test_trunk_downlink.py` | 16 | Hotspot / OpenBridge group calls, concurrent calls, private voice and unit data reaching the sites end to end; a site's subscription never cuts a hotspot on the shared MASTER; a call losing its terminator after burst C still ends |
+| `test_trunk_unit_location.py` | 8 | Where a unit is: registrations survive the site's re-login, a later sighting elsewhere wins, SUB_MAP entries on a trunking system age for the OpenBridge fan-out, de-registration releases the unit |
+| `test_trunk_uplink.py` | 13 | Concurrent calls from one site on one slot (packet control, START/END, LC, durations per stream), site to site with the UUID, parrot, private calls, TG rule / loop control / loop guard seeing site streams, row cleanup |
 
 ### echo/
 

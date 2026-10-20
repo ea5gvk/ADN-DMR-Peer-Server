@@ -135,7 +135,9 @@ class ObpForwardMixin:
         status = getattr(proto, "STATUS", None)
         if status is None or not isinstance(status, dict):
             return False
-        slot_st = status.get(slot)
+        slot_st = self._trunk_rx_row(system_name, stream_id)  # a Tier III site: the stream's row
+        if slot_st is None:
+            slot_st = status.get(slot)
         if not isinstance(slot_st, dict):
             return False
         return slot_st.get("RX_STREAM_ID") == stream_id

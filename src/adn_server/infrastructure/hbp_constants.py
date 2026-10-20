@@ -38,6 +38,21 @@ from ..domain.hbp_protocol import (  # noqa: F401 — re-export
     STREAM_TO,
     VER,
 )
+from ..domain.trunking import (  # noqa: F401 — re-export (DMR Tier III login names + DMRT)
+    DMRT,
+    DTCACK,
+    DTCC,
+    DTCCL,
+    DTCG,
+    DTCK,
+    DTCL,
+    DTCNAK,
+    DTCO,
+    DTCP,
+    DTCPING,
+    DTCPONG,
+    DTCSBKN,
+)
 
 # DMR
 DMR = b"DMR"
@@ -45,6 +60,7 @@ DMRD = b"DMRD"
 DMRE = b"DMRE"
 DMRF = b"DMRF"
 DMRA = b"DMRA"
+DMRG = b"DMRG"   # radio GPS position from a DMRGateway (not handled; ignored on trunking systems)
 
 # Master/peer
 RPTL = b"RPTL"
@@ -56,6 +72,7 @@ RPTC = b"RPTC"
 RPTP = b"RPTP"
 RPTA = b"RPTA"
 RPTO = b"RPTO"
+RPTG = b"RPTG"   # home position (DTCG on a trunking site)
 MSTCL = b"MSTCL"
 MSTNAK = b"MSTNAK"
 MSTPONG = b"MSTPONG"

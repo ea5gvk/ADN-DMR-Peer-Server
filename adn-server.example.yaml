@@ -212,6 +212,27 @@ SYSTEMS:
     # loop guard never takes it for a bridge loop; this only makes it explicit.
     LOOP_GUARD: false
 
+  # DMR Tier III trunking sites (DMRGateway TrunkingEnabled=1 + dmrtc). Each site logs in like a
+  # hotspot, with the DTC* opcodes, on this MASTER's own PORT (Brandmeister's "DMRTC link" uses
+  # 62037) and subscribes its own talkgroups: no TS1/TS2_STATIC, SINGLE_MODE or DEFAULT_REFLECTOR.
+  # MAX_PEERS = number of sites. To use it: uncomment, set ENABLED: true and a PASSPHRASE
+  # (docs: server/user-guide/tier3-trunking.md).
+  # TRUNK:
+  #   MODE: MASTER
+  #   ENABLED: false
+  #   TRUNKING: true
+  #   REPEAT: true
+  #   MAX_PEERS: 10
+  #   IP: ""
+  #   PORT: 62037
+  #   PASSPHRASE: "<set-in-adn-server.yaml>"
+  #   USE_ACL: true
+  #   REG_ACL: DENY:1
+  #   SUB_ACL: DENY:1
+  #   TGID_TS1_ACL: PERMIT:ALL
+  #   TGID_TS2_ACL: PERMIT:ALL
+  #   SINGLE_MODE: false
+
   # OpenBridge: use DMRE embedded version 5 ("OpenBridge v5") + ENHANCED_OBP on all ADN Systems peers.
   OBP-TEST:
     MODE: OPENBRIDGE

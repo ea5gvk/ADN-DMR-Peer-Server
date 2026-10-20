@@ -83,6 +83,7 @@ from ...application.routing.peer_downlink_index import (
 )
 from ...application.routing.sub_map_learning import system_learns_sub_map
 from ...application.server_voice import all_server_voice_ids
+from ...application.trunking.config import system_is_trunking
 from ...domain import bytes_3, bytes_4, int_id
 from ...domain.dmr import decode
 from ...domain.dmr.const import LC_OPT
@@ -123,12 +124,14 @@ from ..hbp_constants import (
     DMRA,
     DMRD,
     DMRE,
+    DTCACK,
+    DTCNAK,
+    DTCPONG,
     EOBP,
     HBPF_DATA_SYNC,
     HBPF_SLT_VHEAD,
     HBPF_SLT_VTERM,
     MSTC,
-    MSTCL,
     MSTN,
     MSTNAK,
     MSTP,
@@ -158,6 +161,7 @@ from ..mesh.obp_v1 import (
 )
 from ..mesh.registry import MeshCodecRegistry
 from ..options_redaction import redact_pass_in_options
+from .hbp_trunking import TRUNK_LOGIN_ALIASES, HbpTrunkingMixin
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +228,7 @@ def _make_slot_status() -> dict[str, Any]:
     }
 
 
-class HBPProtocol(DatagramProtocol):
+class HBPProtocol(HbpTrunkingMixin, DatagramProtocol):
     """Port of HBSYSTEM (hblink.py). MASTER: same master_datagramReceived logic and logs."""
 
     def __init__(
@@ -252,6 +256,7 @@ class HBPProtocol(DatagramProtocol):
         get_subscription_store: Callable[[], Any] | None = None,
         mesh_registry: MeshCodecRegistry | None = None,
         dynamic_tg_uc: Any = None,
+        trunking_uc: Any = None,
     ) -> None:
         self._CONFIG = config
         self._system = system_name
@@ -277,9 +282,12 @@ class HBPProtocol(DatagramProtocol):
         self._on_dmra_fragment_stored = on_dmra_fragment_stored
         self._mesh_registry = mesh_registry if mesh_registry is not None else _DEFAULT_MESH_REGISTRY
         self._dynamic_tg_uc = dynamic_tg_uc
+        self._trunking_uc = trunking_uc
         self._config = config.get("SYSTEMS", {}).get(system_name, {})
         # SUB_MAP_LEARN, decided once per config (ingress checks it on every frame)
         self._learns_sub_map = system_learns_sub_map(self._config)
+        # TRUNKING: DMR Tier III sites (DTC* login, DMRT), see hbp_trunking
+        self._trunking = system_is_trunking(self._config)
         self._obp_policy_cache: tuple[Any, BridgePolicy] | None = None
         self._peer_mesh_config_cache: PeerMeshConfig | None = None
         if self._config.get("MODE") == "OPENBRIDGE":
@@ -296,6 +304,8 @@ class HBPProtocol(DatagramProtocol):
         else:
             self._laststrid = {1: b"", 2: b""}
             self.STATUS = {1: _make_slot_status(), 2: _make_slot_status()}
+        # Tier III: one RX row per site uplink stream instead of the slot STATUS (hbp_trunking)
+        self.TRUNK_RX: dict[bytes, dict[str, Any]] = {}
         if self._config.get("MODE") == "MASTER":
             self._peers = self._config.setdefault("PEERS", {})
             self._downlink_index_dirty = True
@@ -370,6 +380,7 @@ class HBPProtocol(DatagramProtocol):
         sys_cfg = config.get("SYSTEMS", {}).get(self._system, {})
         self._config = sys_cfg
         self._learns_sub_map = system_learns_sub_map(sys_cfg)
+        self._trunking = system_is_trunking(sys_cfg)
         self._obp_policy_cache = None
         self._peer_mesh_config_cache = None
         if sys_cfg.get("MODE") == "MASTER":
@@ -402,6 +413,9 @@ class HBPProtocol(DatagramProtocol):
     def send_peers(self, _packet: bytes, _hops: bytes = b"", _ber: bytes = b"\x00", _rssi: bytes = b"\x00", _source_server: bytes = b"\x00\x00\x00\x00", _source_rptr: bytes = b"\x00\x00\x00\x00") -> None:
         if len(_packet) < 54:
             _packet = b"".join([_packet, _ber, _rssi])
+        if self._trunking and _packet[:4] == DMRD:
+            self._trunk_send_peers(_packet)
+            return
         parsed = parse_dmrd_route_fields(_packet)
         for _peer in self._iter_downlink_peers(_packet):
             if parsed is None:
@@ -936,6 +950,9 @@ class HBPProtocol(DatagramProtocol):
 
     def send_peer(self, _peer: bytes, _packet: bytes, *, _skip_dual_expand: bool = False) -> None:
         if _packet[:4] == DMRD:
+            if self._trunking:  # a Tier III site: the caller chose it; 71 bytes, no hotspot gates
+                self._trunk_send_dmrd(_peer, _packet)
+                return
             if not self._peer_should_receive_dmrd(_peer, _packet):
                 return
             peer = self._peers.get(_peer)
@@ -978,8 +995,8 @@ class HBPProtocol(DatagramProtocol):
         so nobody else on a shared MASTER is held off.
         """
         peer = self._peers.get(peer_id)
-        if not isinstance(peer, dict) or peer.get("CONNECTION") != "YES":
-            return False
+        if not isinstance(peer, dict) or peer.get("CONNECTION") != "YES" or self._trunking:
+            return False  # no TG/ID 4000 prompt for a Tier III site
         packet = b"".join([packet[:11], peer_id, packet[15:]])
         bits = packet[15]
         slot = 2 if bits & 0x80 else 1
@@ -1134,8 +1151,8 @@ class HBPProtocol(DatagramProtocol):
         tgid: int | None = None,
     ) -> int:
         """Send DMRA to peers that would receive group voice on ``(slot, tgid)``."""
-        if self._config.get("MODE") != "MASTER":
-            return 0
+        if self._config.get("MODE") != "MASTER" or self._trunking:
+            return 0  # a Tier III site (DMRGateway TrunkingEnabled=1) does not take DMRA
         if slot is None or tgid is None:
             logger.warning(
                 "(%s) *TALKER ALIAS* DMRA not sent: missing slot/tgid (stream filter)",
@@ -1250,7 +1267,7 @@ class HBPProtocol(DatagramProtocol):
         mode = self._config.get("MODE")
         if mode == "MASTER":
             for _peer in self._peers:
-                self.send_peer(_peer, b"".join([MSTCL, _peer]))
+                self.send_peer(_peer, b"".join([self._close_opcode(_peer), _peer]))
                 logger.info("(%s) De-Registration sent to Peer: %s (%s)", self._system, _rptc_field_str(self._peers[_peer].get("CALLSIGN", b"")), self._peers[_peer].get("RADIO_ID", b""))
         elif mode == "PEER":
             self.send_master(b"".join([RPTCL, self._config.get("RADIO_ID", b"\x00\x00\x00\x00")]))
@@ -1356,11 +1373,13 @@ class HBPProtocol(DatagramProtocol):
                 "(%s) Peer %s (%s) has timed out and is being removed",
                 self._system, _rptc_field_str(self._peers[peer].get("CALLSIGN", b"")), self._peers[peer].get("RADIO_ID", b""),
             )
-            self.transport.write(b"".join([MSTCL, peer]), self._peers[peer]["SOCKADDR"])
+            self.transport.write(b"".join([self._close_opcode(peer), peer]), self._peers[peer]["SOCKADDR"])
             self._remove_peer(peer)
             self._reset_if_no_peers()
         if remove_list:
             self._push_config_to_monitor()
+        if self._trunking:
+            self._trunk_maintenance(time.time())
 
     def _reset_if_no_peers(self) -> None:
         """Last peer gone: restore default OPTIONS and let BRIDGERESET clear this system's legs.
@@ -1387,6 +1406,8 @@ class HBPProtocol(DatagramProtocol):
             sessions = peer.get("_UA_SESSION")
             if isinstance(sessions, dict):
                 sessions.clear()
+            if peer.get("TRUNKING") is True:
+                self._trunk_site_gone(peer_id)
         pk = bytes_4(int_id(peer_id))
         self._peer_voice_slots.pop(pk, None)
         self._peer_voice_hangtime.pop(pk, None)
@@ -1442,6 +1463,15 @@ class HBPProtocol(DatagramProtocol):
         """Direct port of hblink.py master_datagramReceived (lines 888-1146)."""
         _command = _data[:4]
         _global = self._CONFIG.get("GLOBAL", {})
+        # Login answers; a Tier III site logs in with the DTC* names and is answered with them.
+        _ack, _nak, _pong, _trunk_login = RPTACK, MSTNAK, MSTPONG, False
+        if self._trunking and _command != DMRD:
+            _data = self._trunk_master_datagram(_data, _sockaddr)
+            if _data is None:
+                return
+            if _command in TRUNK_LOGIN_ALIASES:
+                _command = _data[:4]
+                _ack, _nak, _pong, _trunk_login = DTCACK, DTCNAK, DTCPONG, True
 
         if _command == DMRD:
             _peer_id = _data[11:15]
@@ -1486,6 +1516,11 @@ class HBPProtocol(DatagramProtocol):
                 # ACL (legacy order and _laststrid)
                 if self._acl_rejects_dmrd(_rf_src, _dst_id, _slot, _stream_id, _unit_service_dst):
                     return
+                # A Tier III site: its call UUID is kept for the stream and the classic 55 bytes go
+                # on; the stream has its own RX row, the slot STATUS is left to hotspots.
+                _site_rx: dict[str, Any] | None = None
+                if self._trunking:
+                    _data, _site_rx = self._trunk_rx_ingress(_peer_id, _data, pkt_time)
                 # SUB_MAP update (legacy routerHBP.dmrd_received). 4th element
                 # (peer_id) is new — lets same-system private-call repeat target
                 # the exact hotspot instead of broadcasting to every peer.
@@ -1499,6 +1534,7 @@ class HBPProtocol(DatagramProtocol):
                     _call_type in ("group", "vcsbk")
                     and _frame_type == HBPF_DATA_SYNC
                     and _dtype_vseq == HBPF_SLT_VHEAD
+                    and _site_rx is None  # a site's talkgroups are its DMRT subscriptions
                 ):
                     _ua_slot = normalize_ua_voice_slot(self._peers[_peer_id], _slot)
                     _prev_single_tg = peer_single_exclusive_tgid(
@@ -1538,7 +1574,7 @@ class HBPProtocol(DatagramProtocol):
                     self.store_ta_from_voice_burst(
                         _peer_id, _rf_src, _stream_id, _dtype_vseq, _data[20:53],
                     )
-                if _call_type in ("group", "vcsbk"):
+                if _call_type in ("group", "vcsbk") and _site_rx is None:
                     self._sync_peer_voice_from_ingress(
                         _peer_id,
                         _slot,
@@ -1553,7 +1589,8 @@ class HBPProtocol(DatagramProtocol):
                 _protocols: dict[str, Any] = {}
                 if self._router and getattr(self._router, "_get_protocols", None):
                     _protocols = self._router._get_protocols() or {}
-                _repeat_ok = (
+                # A site's frames go to the other sites once routing accepts them (below).
+                _repeat_ok = _site_rx is None and (
                     _call_type not in ("group", "vcsbk")
                     or hbp_master_ingress_repeat_allowed(
                         _slot_st,
@@ -1664,8 +1701,8 @@ class HBPProtocol(DatagramProtocol):
                                     peer_id=_peer_id, voice_slot=_src_vs,
                                 )
                                 self.send_peer(_peer_id, _echo_remapped, _skip_dual_expand=True)
-                # TG 4000: reset after REPEAT so peers see the packet (legacy order)
-                if self._handle_tg4000_packet(
+                # TG 4000: reset after REPEAT so peers see the packet (legacy order); not for a site
+                if _site_rx is None and self._handle_tg4000_packet(
                     _peer_id, _slot, _int_dst_id, _call_type, _frame_type, _dtype_vseq,
                     rf_src=_rf_src, stream_id=_stream_id,
                 ):
@@ -1683,7 +1720,8 @@ class HBPProtocol(DatagramProtocol):
                 dmrpkt = _data[20:53] if len(_data) >= 53 else b""
                 _unit_data = is_unit_data_ingress(
                     _call_type, _dtype_vseq, _stream_id,
-                    self.STATUS.get(_slot, {}).get("RX_STREAM_ID") if _slot in self.STATUS else None,
+                    _site_rx.get("RX_STREAM_ID") if _site_rx is not None
+                    else self.STATUS.get(_slot, {}).get("RX_STREAM_ID") if _slot in self.STATUS else None,
                 )
                 _accepted = False
                 if self._dmrd_received:
@@ -1693,7 +1731,12 @@ class HBPProtocol(DatagramProtocol):
                         ingress_pkt_time=pkt_time,
                     )
                 if _accepted:
-                    if _slot in self.STATUS and not _unit_data:
+                    if _site_rx is not None:
+                        self._trunk_rx_accepted(
+                            _site_rx, _peer_id, _data,
+                            slot=_slot, call_type=_call_type, unit_data=_unit_data, pkt_time=pkt_time,
+                        )
+                    elif _slot in self.STATUS and not _unit_data:
                         _suppress = self.STATUS[_slot].get("_suppress_uplink")
                         if _stream_id != self.STATUS[_slot].get("RX_STREAM_ID"):
                             if not _suppress:
@@ -1747,6 +1790,7 @@ class HBPProtocol(DatagramProtocol):
                     and _slot in self.STATUS
                     and self.STATUS[_slot].get("RX_TYPE") != HBPF_SLT_VTERM
                     and self._on_in_band_signalling
+                    and _site_rx is None
                 ):
                     self._on_in_band_signalling(self._system, _slot, _dst_id, pkt_time)
                 if (
@@ -1804,23 +1848,25 @@ class HBPProtocol(DatagramProtocol):
                         "SOFTWARE_ID": "",
                         "PACKAGE_ID": "",
                     }
+                    if _trunk_login:
+                        self._peers[_peer_id]["TRUNKING"] = True
                     if _peer_id == b"\xff\xff\xff\xff":
                         logger.info("(%s) Server Status Probe Logging in with Radio ID: %s, %s:%s", self._system, int_id(_peer_id), _sockaddr[0], _sockaddr[1])
                     else:
                         logger.info("(%s) Repeater Logging in with Radio ID: %s, %s:%s", self._system, int_id(_peer_id), _sockaddr[0], _sockaddr[1])
                     _salt_str = bytes_4(self._peers[_peer_id]["SALT"])
-                    self.send_peer(_peer_id, b"".join([RPTACK, _salt_str]))
+                    self.send_peer(_peer_id, b"".join([_ack, _salt_str]))
                     self._peers[_peer_id]["CONNECTION"] = "CHALLENGE_SENT"
                     logger.info("(%s) Sent Challenge Response to %s for login: %s", self._system, int_id(_peer_id), self._peers[_peer_id]["SALT"])
                 else:
-                    self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                    self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                     if self._config.get("PROXY_CONTROL"):
                         self.proxy_IPBlackList(_peer_id, _sockaddr)
                     logger.warning("(%s) Invalid Login from %s Radio ID: %s Denied by Registation ACL or not registered ID", self._system, _sockaddr[0], int_id(_peer_id))
                     if self._CONFIG.get("SYSTEMS", {}).get(self._system) and not self._peers:
                         self._CONFIG["SYSTEMS"][self._system]["_reset"] = True
             else:
-                self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                 logger.warning("(%s) Registration denied from Radio ID: %s Maximum number of peers exceeded", self._system, int_id(_peer_id))
 
         elif _command == RPTK:
@@ -1837,28 +1883,28 @@ class HBPProtocol(DatagramProtocol):
                     _calc_hash_val = _calc_hash(_salt_str, _individual_password)
                     if _sent_hash == _calc_hash_val:
                         _this_peer["CONNECTION"] = "WAITING_CONFIG"
-                        self.send_peer(_peer_id, b"".join([RPTACK, _peer_id]))
+                        self.send_peer(_peer_id, b"".join([_ack, _peer_id]))
                         logger.info("(%s) Peer %s has completed the login exchange successfully (individual password)", self._system, _this_peer["RADIO_ID"])
                     else:
                         logger.warning("(%s) Peer %s has FAILED the login exchange (wrong individual password)", self._system, _this_peer["RADIO_ID"])
-                        self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                        self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                         self._remove_peer(_peer_id)
                 elif len(_passphrase) > 0:
                     _calc_hash_val = _calc_hash(_salt_str, _passphrase)
                     if _sent_hash == _calc_hash_val:
                         _this_peer["CONNECTION"] = "WAITING_CONFIG"
-                        self.send_peer(_peer_id, b"".join([RPTACK, _peer_id]))
+                        self.send_peer(_peer_id, b"".join([_ack, _peer_id]))
                         logger.info("(%s) Peer %s has completed the login exchange successfully (global passphrase)", self._system, _this_peer["RADIO_ID"])
                     else:
                         logger.warning("(%s) Peer %s has FAILED the login exchange (wrong global passphrase)", self._system, _this_peer["RADIO_ID"])
-                        self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                        self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                         self._remove_peer(_peer_id)
                 else:
                     logger.warning("(%s) Peer %s has FAILED - no individual password configured and no global passphrase", self._system, _this_peer["RADIO_ID"])
-                    self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                    self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                     self._remove_peer(_peer_id)
             else:
-                self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                 logger.info("(%s) Login challenge from Radio ID that has not logged in: %s", self._system, int_id(_peer_id))
 
         elif _command == RPTC:
@@ -1866,7 +1912,9 @@ class HBPProtocol(DatagramProtocol):
                 _peer_id = _data[5:9]
                 if _peer_id in self._peers and self._peers[_peer_id]["CONNECTION"] == "YES" and self._peers[_peer_id]["SOCKADDR"] == _sockaddr:
                     logger.info("(%s) Peer is closing down: %s (%s)", self._system, _rptc_field_str(self._peers[_peer_id]["CALLSIGN"]), int_id(_peer_id))
-                    self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                    # DTCCL gets no answer: a late DTCNAK would restart the login of a reopened gateway.
+                    if not _trunk_login:
+                        self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
                     self._remove_peer(_peer_id)
                     self._reset_if_no_peers()
                     self._push_config_to_monitor()
@@ -1902,12 +1950,12 @@ class HBPProtocol(DatagramProtocol):
                         self._remove_peer(_peer_id)
                         if self._config.get("PROXY_CONTROL"):
                             self.proxy_IPBlackList(_peer_id, _sockaddr)
-                        self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                        self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                         if not self._peers:
                             self._CONFIG.setdefault("SYSTEMS", {}).setdefault(self._system, {})["_reset"] = True
                         logger.info("(%s) Callsign does not match subscriber database: ID: %s, Sent Call: %s, DB call %s", self._system, int_id(_peer_id), _sent_call, self.validate_id(_peer_id))
                     else:
-                        self.send_peer(_peer_id, b"".join([RPTACK, _peer_id]))
+                        self.send_peer(_peer_id, b"".join([_ack, _peer_id]))
                         logger.info(
                             "(%s) Peer %s (%s) has sent repeater configuration, Package ID: %s, Software ID: %s, Desc: %s",
                             self._system,
@@ -1922,7 +1970,8 @@ class HBPProtocol(DatagramProtocol):
                         self._mark_downlink_index_dirty()
                         self._config_push_throttle.note_peer_connected()
                         self._push_config_to_monitor()
-                        if self._dynamic_tg_uc is not None:
+                        # A Tier III site has no dynamic TGs: its talkgroups are DMRT subscriptions.
+                        if self._dynamic_tg_uc is not None and not _trunk_login:
                             _sys_cfg = self._CONFIG.get("SYSTEMS", {}).get(self._system, {})
                             self._dynamic_tg_uc.restore_peer(
                                 _peer_id, self._system, _sys_cfg,
@@ -1930,7 +1979,7 @@ class HBPProtocol(DatagramProtocol):
                                 lambda tgids: self._mark_downlink_index_dirty() if tgids else tgids
                             )
                 else:
-                    self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                    self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                     logger.info("(%s) Peer info from Radio ID that has not logged in: %s", self._system, int_id(_peer_id))
 
         elif _command == RPTO:
@@ -1985,10 +2034,10 @@ class HBPProtocol(DatagramProtocol):
             if _peer_id in self._peers and self._peers[_peer_id]["CONNECTION"] == "YES" and self._peers[_peer_id]["SOCKADDR"] == _sockaddr:
                 self._peers[_peer_id]["PINGS_RECEIVED"] += 1
                 self._peers[_peer_id]["LAST_PING"] = time.time()
-                self.send_peer(_peer_id, b"".join([MSTPONG, _peer_id]))
+                self.send_peer(_peer_id, b"".join([_pong, _peer_id]))
                 logger.log(logging.TRACE if hasattr(logging, "TRACE") else logging.DEBUG, "(%s) Received and answered RPTPING from peer %s (%s)", self._system, _rptc_field_str(self._peers[_peer_id]["CALLSIGN"]), int_id(_peer_id))
             else:
-                self.transport.write(b"".join([MSTNAK, _peer_id]), _sockaddr)
+                self.transport.write(b"".join([_nak, _peer_id]), _sockaddr)
                 logger.info("(%s) Ping from Radio ID that is not logged in: %s", self._system, int_id(_peer_id))
 
         elif _command == DMRA:
@@ -2697,6 +2746,7 @@ def HBPProtocolFactory(
     get_subscription_store: Callable[[], Any] | None = None,
     mesh_registry: MeshCodecRegistry | None = None,
     dynamic_tg_uc: Any = None,
+    trunking_uc: Any = None,
 ) -> HBPProtocol:
     """Create HBP protocol instance (legacy: one HBSYSTEM per system)."""
     return HBPProtocol(
@@ -2723,4 +2773,5 @@ def HBPProtocolFactory(
         get_subscription_store=get_subscription_store,
         mesh_registry=mesh_registry,
         dynamic_tg_uc=dynamic_tg_uc,
+        trunking_uc=trunking_uc,
     )

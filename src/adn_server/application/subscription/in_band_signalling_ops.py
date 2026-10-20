@@ -53,6 +53,8 @@ def apply_in_band_signalling_store(
     dst_id_b = dst_id if isinstance(dst_id, bytes) and len(dst_id) >= 3 else bytes_3(dst_group)
 
     for sub in store.list_by_system(SystemId(system_name)):
+        if sub.policy == ActivationPolicy.TRUNK:
+            continue  # held by Tier III subscriptions: no in-band rule (SINGLE, TG 4000) applies
         relay_table_key = sub.table_key()
         if relay_table_key[:1] == "#" and dst_group != 9:
             continue

@@ -81,10 +81,12 @@ from .routing.store_authority_mixin import StoreAuthorityMixin
 from .routing.sub_map_learning import learn_sub_map
 from .routing.subscription_table import SubscriptionTableMixin
 from .routing.timers import RoutingTimerMixin
+from .routing.trunk_routing import TrunkRoutingMixin
 from .routing.voice_subscription import VoiceSubscriptionMixin
 from .server_voice import all_server_voice_ids
 from .subscription.subscription_queries import store_has_table
 from .talker_alias_use_cases import TalkerAliasUseCases
+from .trunking.config import system_is_trunking
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +108,7 @@ class RoutingUseCases(
     SubscriptionTableMixin,
     StoreAuthorityMixin,
     VoiceSubscriptionMixin,
+    TrunkRoutingMixin,
 ):
     """Use cases for subscription-based voice routing."""
 
@@ -320,6 +323,9 @@ class RoutingUseCases(
             return True
         systems_cfg = self._config.get("SYSTEMS", {})
         source_is_obp = systems_cfg.get(system_name, {}).get("MODE") == "OPENBRIDGE"
+        # A Tier III site: its streams run at once with the same slot bit, each with its own
+        # RX row, read below wherever a hotspot's slot STATUS is read. None for any other source.
+        _trunk_rx = self._trunk_rx_row(system_name, stream_id)
         pkt_time = ingress_pkt_time if ingress_pkt_time is not None else time.time()
         if (
             call_type == "group"
@@ -337,7 +343,10 @@ class RoutingUseCases(
             ):
                 return
             # Arm ON in-band rules on VHEAD (echo 9990 and UA bridges); VTERM handled in udp_hbp too.
-            if frame_type == HBPF_DATA_SYNC and dtype_vseq == HBPF_SLT_VHEAD:
+            # Never TG 4000 from a Tier III site: its talkgroups are its DMRT subscriptions.
+            if frame_type == HBPF_DATA_SYNC and dtype_vseq == HBPF_SLT_VHEAD and not (
+                _trunk_rx is not None and int_id(dst_id) == 4000
+            ):
                 self.apply_in_band_signalling(system_name, slot, dst_id, pkt_time)
         relay_table_key = str(int_id(dst_id))
         dst_int = int_id(dst_id)
@@ -403,11 +412,12 @@ class RoutingUseCases(
                     if src_proto and getattr(src_proto, "STATUS", None):
                         slot_st = src_proto.STATUS.get(slot, {})
                         if isinstance(slot_st, dict):
+                            _rx_st = _trunk_rx if _trunk_rx is not None else slot_st
                             _is_new_rx_stream = (
-                                stream_id != slot_st.get("RX_STREAM_ID")
+                                stream_id != _rx_st.get("RX_STREAM_ID")
                                 and stream_id not in slot_st.get("RX_STREAMS", ())
                             )
-                            _suppress_uplink_rx = bool(slot_st.get("_suppress_uplink"))
+                            _suppress_uplink_rx = bool(_rx_st.get("_suppress_uplink"))
                 if _is_new_rx_stream and not _suppress_uplink_rx:
                     _rx_report_peer = peer_id
                     if not source_is_obp and not synthetic_announcement:
@@ -452,10 +462,11 @@ class RoutingUseCases(
                     start = ent.get("START") if isinstance(ent, dict) else None
                     if start is None and slot in st:
                         tracked = st.get(slot, {}).get("RX_STREAMS", {}).get(stream_id)
-                        start = tracked[3] if tracked else st.get(slot, {}).get("RX_START")
+                        _rx_st = _trunk_rx if _trunk_rx is not None else st.get(slot, {})
+                        start = tracked[3] if tracked else _rx_st.get("RX_START")
                     if start is not None:
                         duration = pkt_time - start
-                    slot_st_vterm = st.get(slot, {})
+                    slot_st_vterm = _trunk_rx if _trunk_rx is not None else st.get(slot, {})
                     if isinstance(slot_st_vterm, dict):
                         _suppress_uplink_vterm = bool(slot_st_vterm.get("_suppress_uplink"))
                 if _suppress_uplink_vterm:
@@ -571,7 +582,7 @@ class RoutingUseCases(
                 ent = st.get(stream_id)
                 source_lc = ent.get("LC") if isinstance(ent, dict) else None
             else:
-                source_lc = st.get(slot, {}).get("RX_LC")
+                source_lc = (_trunk_rx if _trunk_rx is not None else st.get(slot, {})).get("RX_LC")
         if not source_lc or len(source_lc) < 9:
             source_lc = b"\x00\x00\x20" + dst_id_b + rf_src
         # Legacy bridge_master routerOBP: _sysIgnore accumulates across each to_target(BRIDGES[_bridge])
@@ -598,7 +609,7 @@ class RoutingUseCases(
         # not be forwarded upstream to avoid disrupting the in-progress conversation.
         _suppress_uplink = False
         if not source_is_obp and src_proto and getattr(src_proto, "STATUS", None):
-            _src_slot_st = src_proto.STATUS.get(slot, {})
+            _src_slot_st = _trunk_rx if _trunk_rx is not None else src_proto.STATUS.get(slot, {})
             if isinstance(_src_slot_st, dict) and _src_slot_st.get("_suppress_uplink"):
                 _suppress_uplink = True
         _leg_iter = _plan.entries
@@ -762,6 +773,8 @@ class RoutingUseCases(
                     _ts_st = _target_status[entry_ts]
                     if source_is_obp:
                         _src_stream_st = getattr(src_proto, "STATUS", {}).get(stream_id, {}) if src_proto else {}
+                    elif _trunk_rx is not None:
+                        _src_stream_st = _trunk_rx
                     else:
                         _src_stream_st = getattr(src_proto, "STATUS", {}).get(slot, {}) if src_proto else {}
                     # Slot contention: active QSO blocks any other stream; post-VTERM uses GROUP_HANGTIME.
@@ -772,7 +785,10 @@ class RoutingUseCases(
                     _target_connected = (
                         count_connected_peers(_tgt_peers) if isinstance(_tgt_peers, dict) else 0
                     )
-                    _defer_slot_contention = inject_only_defer_obp_hbp_slot_contention(
+                    # A Tier III site carries every call at once: no slot contention, and each
+                    # stream keeps its own TX leg (LC) on the target slot row.
+                    _target_is_trunk = system_is_trunking(_target_system)
+                    _defer_slot_contention = _target_is_trunk or inject_only_defer_obp_hbp_slot_contention(
                         self._config,
                         entry["SYSTEM"],
                         _target_system,
@@ -780,7 +796,9 @@ class RoutingUseCases(
                         source_is_hbp=not source_is_obp,
                         connected_count=_target_connected,
                     )
-                    _obp_deferred_bridge = _defer_slot_contention and source_is_obp
+                    _obp_deferred_bridge = _defer_slot_contention and (
+                        source_is_obp or _trunk_rx is not None or _target_is_trunk
+                    )
                     _bridge_tx_leg: dict[str, Any] | None = None
                     if _obp_deferred_bridge:
                         _bridge_tx_leg = obp_deferred_bridge_tx_leg(_ts_st, stream_id)
@@ -827,7 +845,7 @@ class RoutingUseCases(
                         )
                         if not _obp_deferred_bridge:
                             _ts_st["TX_TYPE"] = HBPF_SLT_VTERM
-                    _apply_master_slot_contention = (
+                    _apply_master_slot_contention = not _target_is_trunk and (
                         not _defer_slot_contention
                         or master_slot_holds_server_broadcast(
                             _ts_st,
@@ -873,7 +891,7 @@ class RoutingUseCases(
                     # New stream detection — legacy OBP uses flat TX_STREAM_ID; deferred OBP uses per-stream legs.
                     if _obp_deferred_bridge and _bridge_tx_leg is not None:
                         _is_new_stream = "TX_STREAM_ID" not in _bridge_tx_leg
-                    elif source_is_obp:
+                    elif source_is_obp or _trunk_rx is not None:
                         _is_new_stream = (_ts_st.get("TX_STREAM_ID") != stream_id)
                     else:
                         src_status = getattr(src_proto, "STATUS", None) if src_proto else None
@@ -1312,8 +1330,11 @@ class RoutingUseCases(
         # the number of bridges, and remote masters that mis-file those frames create a
         # dynamic talkgroup named after the radio id.
         protocols = self._get_protocols() if self._get_protocols else {}
+        # A unit registered at a logged-in Tier III site is served here; a SUB_MAP entry on a
+        # trunking system ages like any other.
+        _trunk_site = self._trunk_unit_site(dst_id)
         _local_sub = self._config.get("_SUB_MAP", {}).get(dst_id)
-        _dst_is_fresh_local_sub = bool(
+        _dst_is_fresh_local_sub = self._trunk_unit_registered(_trunk_site, dst_id) or bool(
             _local_sub
             and systems_cfg.get(_local_sub[0], {}).get("MODE") != "OPENBRIDGE"
             and pkt_time - _local_sub[2] < UNIT_DATA_LOCAL_SUB_MAX_AGE
@@ -1336,7 +1357,10 @@ class RoutingUseCases(
 
         # SUB_MAP lookup (legacy ~2297-2312 / ~3099-3114)
         sub_map = self._config.get("_SUB_MAP", {})
-        if dst_id in sub_map:
+        if _trunk_site is not None:
+            if self._send_data_to_trunk_site(system_name, _trunk_site, data, rf_src, dst_id, stream_id, peer_id):
+                _forwarded.append(_trunk_site[0])
+        elif dst_id in sub_map:
             _sub_map_entry = sub_map[dst_id]
             _d_system, _d_slot, _d_time = _sub_map_entry[:3]
             _d_peer_id = _sub_map_entry[3] if len(_sub_map_entry) > 3 else None
@@ -1364,7 +1388,8 @@ class RoutingUseCases(
         else:
             # Hotspot 6/7-digit peer ID match (legacy ~3131-3168 / ~2314-2345)
             for _d_system, _d_sys_cfg in systems_cfg.items():
-                if _d_sys_cfg.get("MODE") != "MASTER":
+                # A Tier III site is not a hotspot: its units are found by registration only.
+                if _d_sys_cfg.get("MODE") != "MASTER" or system_is_trunking(_d_sys_cfg):
                     continue
                 _d_proto = protocols.get(_d_system)
                 if not _d_proto:
@@ -1474,9 +1499,32 @@ class RoutingUseCases(
         if source_proto:
             source_status.setdefault(slot, {})
         slot_st = source_status[slot] if source_proto and slot in source_status else {}
+        # From a Tier III site: the stream's own RX row (its calls run at once on "one slot").
+        _trunk_rx = self._trunk_rx_row(system_name, stream_id)
+        if _trunk_rx is not None:
+            slot_st = _trunk_rx
         _notify_pvt_start = False
         _unit_data = is_unit_data_ingress(
             "unit", dtype_vseq, stream_id, slot_st.get("RX_STREAM_ID"),
+        )
+        # A unit at a Tier III site: its site is looked up on every frame and nothing is kept
+        # on the instance, so concurrent calls never take each other's target. Between sites
+        # of one system the MASTER delivers itself, as for hotspots.
+        _trunk_site = self._trunk_unit_site(dst_id)
+        _trunk_targets = None if _trunk_site is None else ([_trunk_site[0]] if _trunk_site[0] != system_name else [])
+        _trunk_peer_ids: dict[str, bytes | None] = {}
+        if _trunk_targets is None and _trunk_rx is not None:
+            # A site's call to a unit elsewhere: its target per frame too (SUB_MAP), never on the instance.
+            _sub = sub_map.get(dst_id)
+            _trunk_targets = [_sub[0]] if _sub and _sub[0] != system_name else []
+            if _trunk_targets:
+                _trunk_peer_ids = {_sub[0]: _sub[3] if len(_sub) > 3 else None}
+        # Monitor START/END TX of a call the MASTER itself delivers: the site of this system the unit is at.
+        _same_system_site = (
+            _trunk_site[1]
+            if _trunk_site is not None and _trunk_site[0] == system_name
+            and self._trunk_site_protocol(system_name, _trunk_site[1]) is not None
+            else None
         )
         if stream_id != slot_st.get("RX_STREAM_ID"):
             if (slot_st.get("RX_TYPE") != HBPF_SLT_VTERM) and (pkt_time < (slot_st.get("RX_TIME", 0) + STREAM_TO)) and (rf_src != slot_st.get("RX_RFS")):
@@ -1487,8 +1535,11 @@ class RoutingUseCases(
                 return
             _notify_pvt_start = True
             slot_st["RX_START"] = pkt_time
-            self._pvt_same_system_dst_peer_id = None
-            if dst_id in sub_map:
+            if _trunk_targets is None:
+                self._pvt_same_system_dst_peer_id = None
+            if _trunk_targets is not None:
+                pass  # targets from _trunk_site, per frame
+            elif dst_id in sub_map:
                 _dst_entry = sub_map[dst_id]
                 if _dst_entry[0] != system_name:
                     self._pvt_targets = [_dst_entry[0]]
@@ -1514,7 +1565,8 @@ class RoutingUseCases(
                 self._pvt_target_peer_ids = {}
             logger.info(
                 "(%s) *PRIVATE CALL START* STREAM ID: %s SUB: %s PEER: %s DST: %s, TS: %s, FORWARD: %s",
-                system_name, int_id(stream_id), int_id(rf_src), int_id(peer_id), int_id(dst_id), slot, self._pvt_targets,
+                system_name, int_id(stream_id), int_id(rf_src), int_id(peer_id), int_id(dst_id), slot,
+                self._pvt_targets if _trunk_targets is None else _trunk_targets,
             )
             # Unit data (ARS/LRRP/SMS) has no VTERM; PRIVATE VOICE START without END leaves
             # monitor timeslot chips stuck. UNIT DATA events cover lastheard instead.
@@ -1524,14 +1576,16 @@ class RoutingUseCases(
                         system_name, int_id(stream_id), int_id(peer_id), int_id(rf_src), slot, int_id(dst_id)
                     )
                 )
-                if self._pvt_same_system_dst_peer_id is not None:
+                _same_dst = self._pvt_same_system_dst_peer_id if _trunk_targets is None else _same_system_site
+                if _same_dst is not None:
                     self._send_routing_event(
                         "PRIVATE VOICE,START,TX,{},{},{},{},{},{},{}".format(
                             system_name, int_id(stream_id), int_id(peer_id), int_id(rf_src), slot, int_id(dst_id),
-                            int_id(self._pvt_same_system_dst_peer_id),
+                            int_id(_same_dst),
                         )
                     )
-        for _target in getattr(self, "_pvt_targets", []):
+        _targets = getattr(self, "_pvt_targets", []) if _trunk_targets is None else _trunk_targets
+        for _target in _targets:
             target_proto = protocols.get(_target)
             if not target_proto:
                 continue
@@ -1539,7 +1593,9 @@ class RoutingUseCases(
             _target_system = systems_cfg.get(_target, {})
             _target_peer_id = None
             if _target_system.get("MODE") != "OPENBRIDGE":
-                _target_peer_id = getattr(self, "_pvt_target_peer_ids", {}).get(_target)
+                _target_peer_id = (
+                    getattr(self, "_pvt_target_peer_ids", {}) if _trunk_targets is None else _trunk_peer_ids
+                ).get(_target)
             if _target_system.get("MODE") == "OPENBRIDGE":
                 if _target_system.get("ENHANCED_OBP") and self._obp_session(_target).keepalive_stale(pkt_time):
                     continue
@@ -1571,6 +1627,24 @@ class RoutingUseCases(
                 send_data = b"".join([_tmp_data, dmrpkt])
                 if frame_type == HBPF_DATA_SYNC and dtype_vseq == HBPF_SLT_VTERM:
                     _target_status[stream_id]["ACTIVE"] = False
+            elif system_is_trunking(_target_system):
+                # The site the unit is at, whatever else it carries (no slot contention);
+                # unit data already went there by the unit data path.
+                _target_peer_id = _trunk_site[1] if _trunk_site is not None else None
+                if _unit_data or self._trunk_site_protocol(_target, _target_peer_id) is None:
+                    continue
+                if stream_id != slot_st.get("RX_STREAM_ID"):
+                    logger.info(
+                        "(%s) PRIVATE call bridged to Tier III site %s on %s, DST: %s",
+                        system_name, int_id(_target_peer_id), _target, int_id(dst_id),
+                    )
+                    self._send_routing_event(
+                        "PRIVATE VOICE,START,TX,{},{},{},{},{},{},{}".format(
+                            _target, int_id(stream_id), int_id(peer_id), int_id(rf_src), slot, int_id(dst_id),
+                            int_id(_target_peer_id),
+                        )
+                    )
+                send_data = data
             else:
                 if (
                     _unit_data
@@ -1658,10 +1732,11 @@ class RoutingUseCases(
                 obp_ber=data[53:54] if len(data) > 53 else b"\x00",
                 obp_rssi=data[54:55] if len(data) > 54 else b"\x00",
                 obp_source_rptr=b"\x00\x00\x00\x00",
-                forwarded=list(getattr(self, "_pvt_targets", [])),
+                forwarded=list(_targets),
             )
         if frame_type == HBPF_DATA_SYNC and dtype_vseq == HBPF_SLT_VTERM and slot_st.get("RX_TYPE") != HBPF_SLT_VTERM:
-            self._pvt_targets = []
+            if _trunk_targets is None:
+                self._pvt_targets = []
             call_duration = pkt_time - slot_st.get("RX_START", pkt_time)
             logger.info(
                 "(%s) *PRIVATE CALL END*   STREAM ID: %s SUB: %s PEER: %s DST: %s, TS %s, Duration: %.2f",
@@ -1678,7 +1753,9 @@ class RoutingUseCases(
                     call_duration,
                 )
             )
-            _same_system_dst_peer_id = getattr(self, "_pvt_same_system_dst_peer_id", None)
+            _same_system_dst_peer_id = (
+                getattr(self, "_pvt_same_system_dst_peer_id", None) if _trunk_targets is None else _same_system_site
+            )
             if _same_system_dst_peer_id is not None:
                 self._send_routing_event(
                     "PRIVATE VOICE,END,TX,{},{},{},{},{},{},{:.2f},{}".format(
@@ -1692,9 +1769,10 @@ class RoutingUseCases(
                         int_id(_same_system_dst_peer_id),
                     )
                 )
-            self._pvt_same_system_dst_peer_id = None
+            if _trunk_targets is None:
+                self._pvt_same_system_dst_peer_id = None
         if self._voice_plugin_bridge is not None and not _unit_data:
-            _pvt_fwd = list(getattr(self, "_pvt_targets", []))
+            _pvt_fwd = list(getattr(self, "_pvt_targets", []) if _trunk_targets is None else _trunk_targets)
             if _notify_pvt_start:
                 self._voice_plugin_bridge.notify_private_after_forward(
                     system_name=system_name,

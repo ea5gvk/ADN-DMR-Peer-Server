@@ -33,6 +33,7 @@ from adn_server.domain.subscription import (
     AudioChannel,
     InbandTriggers,
     Subscription,
+    SubscriptionId,
     SubscriptionPhase,
     SubscriptionRole,
     SubscriptionState,
@@ -461,6 +462,9 @@ def reset_static_tg_store(
     table_key = str(tg)
     if not _table_has_legs(store, table_key):
         return
+    existing = store.get(SubscriptionId(channel=AudioChannel(tgid=TgId(tg), slot=ts), system=SystemId(system)))  # type: ignore[arg-type]
+    if existing is not None and existing.policy == ActivationPolicy.TRUNK:
+        return
     timeout_sec = tmout * 60.0
     _upsert_inband_sink(
         store,
@@ -555,7 +559,7 @@ def deactivate_all_dynamic_relays_store(
         relay_table_key = sub.table_key()
         if relay_table_key.startswith("#"):
             continue
-        if _legacy_to_type(sub) == "STAT":
+        if _legacy_to_type(sub) == "STAT" or sub.policy == ActivationPolicy.TRUNK:
             continue
         if not sub.is_active():
             continue
@@ -586,6 +590,8 @@ def release_dynamic_leg_store(
         if int(sub.target_tgid) != int(tgid) or int(sub.channel.slot) != int(slot):
             continue
         if sub.table_key().startswith("#") or _legacy_to_type(sub) == "STAT" or not sub.is_active():
+            continue
+        if sub.policy == ActivationPolicy.TRUNK:
             continue
         sub.state.phase = SubscriptionPhase.IDLE
         store.upsert(sub)

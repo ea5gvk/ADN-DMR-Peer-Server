@@ -50,6 +50,7 @@ from ...domain import HBPF_DATA_SYNC, HBPF_SLT_VHEAD, bytes_3, bytes_4, int_id
 from ...domain.hbp_protocol import HBPF_SLT_VTERM, STREAM_TO
 from ...domain.mesh_session import obp_session
 from ..server_voice import DEFAULT_SERVER_VOICE_ID
+from ..trunking.config import system_is_trunking
 from .loop_guard import loop_guard_drops
 
 PeerVoiceSlotRow = dict[str, Any]
@@ -880,6 +881,24 @@ def _hbp_slot_active_tgid(slot_st: dict[str, Any], pkt_time: float) -> bytes | N
     return slot_st.get("RX_TGID")
 
 
+def _hbp_voice_rows(proto: Any, status: dict[Any, Any], sys_cfg: dict[str, Any] | None) -> list[Any]:
+    """``STATUS[1]`` and ``STATUS[2]``; on a Tier III MASTER the slots' TX side and each site stream's row.
+
+    A Tier III MASTER never writes its slots' RX fields (a site's streams have
+    their ``TRUNK_RX`` rows): left at their initial values they would hide which
+    stream the slot's bridge TX leg carries.
+    """
+    if not system_is_trunking(sys_cfg):
+        return [status.get(1), status.get(2)]
+    slots = [
+        {key: value for key, value in slot_st.items() if not key.startswith("RX_")}
+        for slot_st in (status.get(1), status.get(2))
+        if isinstance(slot_st, dict)
+    ]
+    rows = getattr(proto, "TRUNK_RX", None)
+    return [*slots, *(rows.values() if isinstance(rows, dict) else ())]
+
+
 def _obp_stream_active(st: dict[str, Any], pkt_time: float) -> bool:
     if st.get("_fin"):
         return False
@@ -1001,8 +1020,7 @@ def tg_has_active_conversation(
         if not isinstance(status, dict):
             continue
         if mode in ("MASTER", "PEER"):
-            for slot_key in (1, 2):
-                slot_st = status.get(slot_key)
+            for slot_st in _hbp_voice_rows(proto, status, systems_cfg.get(sys_name)):
                 if not isinstance(slot_st, dict):
                     continue
                 if not slot_has_active_voice(slot_st, pkt_time):
@@ -1053,8 +1071,7 @@ def group_voice_tg_ingress_collision(
         if not isinstance(status, dict):
             continue
         if mode in ("MASTER", "PEER"):
-            for slot_key in (1, 2):
-                slot_st = status.get(slot_key)
+            for slot_st in _hbp_voice_rows(proto, status, systems_cfg.get(sys_name)):
                 if not isinstance(slot_st, dict):
                     continue
                 active_tg = _hbp_slot_active_tgid(slot_st, pkt_time)

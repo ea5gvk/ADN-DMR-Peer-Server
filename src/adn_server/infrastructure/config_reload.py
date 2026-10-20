@@ -30,6 +30,7 @@ from typing import Any, Callable
 from twisted.internet import defer
 
 from adn_server.application.proxy.deployment import normalize_obp_proxy_targets, normalize_proxy_target
+from adn_server.application.trunking.config import system_is_trunking
 
 from ..domain.errors import ConfigError
 from .config_loader import YamlConfigLoader
@@ -67,6 +68,16 @@ class BindSpec:
 def bind_spec(sys_cfg: dict[str, Any]) -> BindSpec:
     ip = str(sys_cfg.get("IP") or "0.0.0.0")
     return BindSpec(ip=ip, port=int(sys_cfg.get("PORT", 56400)))
+
+
+def protocol_role(sys_cfg: dict[str, Any]) -> tuple[Any, bool]:
+    """What a system's peers logged in as: MODE, and Tier III trunking (DTC*) or not."""
+    return (sys_cfg.get("MODE"), system_is_trunking(sys_cfg))
+
+
+def _role_text(sys_cfg: dict[str, Any]) -> str:
+    mode, trunking = protocol_role(sys_cfg)
+    return f"{mode} (TRUNKING)" if trunking else str(mode)
 
 
 def enabled_systems(systems: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -294,7 +305,15 @@ def reload_server_config(
         new_cfg = new_systems[name]
         old_bind = bind_spec(old_cfg)
         new_bind = bind_spec(new_cfg)
-        merged = merge_system_config(old_cfg, new_cfg)
+        # TRUNKING (or MODE) flipped: its peers logged in under the other protocol, so the
+        # system is removed and added again (no peers, new protocol, listener restarted).
+        role_changed = protocol_role(old_cfg) != protocol_role(new_cfg)
+        if role_changed:
+            merged = copy.deepcopy(new_cfg)
+            if merged.get("MODE") == "MASTER":
+                merged["_reset"] = True  # no peers left: BRIDGERESET clears its legs
+        else:
+            merged = merge_system_config(old_cfg, new_cfg)
         config["SYSTEMS"][name] = merged
         if old_key in config.get("SYSTEMS", {}) and old_key != name:
             config["SYSTEMS"].pop(old_key, None)
@@ -302,6 +321,26 @@ def reload_server_config(
         proto = protocols.get(name)
         inject_only = should_bind_udp is not None and not should_bind_udp(name, merged)
         was_inject_only = should_bind_udp is not None and not should_bind_udp(name, old_cfg)
+        if proto is not None and role_changed:
+            port = transports.pop(name, None)
+            protocols.pop(name, None)
+            if on_system_removed:
+                on_system_removed(name, proto)
+            try:
+                proto.dereg()
+            except Exception as e:
+                log.warning("(CONFIG-RELOAD) dereg %s: %s", name, e)
+            _queue_stop(port, stop_listener, pending_stops)
+            proto = create_protocol(name, config)
+            protocols[name] = proto
+            if not inject_only:
+                _schedule_start(name, merged, proto, new_bind)
+            rebound.append(name)
+            log.info(
+                "(CONFIG-RELOAD) %s changed from %s to %s: peers dropped, protocol restarted",
+                name, _role_text(old_cfg), _role_text(new_cfg),
+            )
+            continue
         if proto is None:
             proto = create_protocol(name, config)
             protocols[name] = proto

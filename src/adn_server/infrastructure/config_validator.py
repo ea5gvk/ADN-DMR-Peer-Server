@@ -381,7 +381,7 @@ def _validate_system(name: str, sys_cfg: dict[str, Any], errors: list[str]) -> N
     mode = sys_cfg.get("MODE")
     if mode is not None and not _is_empty(mode) and not isinstance(mode, str):
         errors.append(f"{prefix}.MODE: expected string, got {type(mode).__name__} ({mode!r}).")
-    for key in ("ENABLED", "REPEAT", "USE_ACL", "SINGLE_MODE", "VOICE_IDENT", "ALLOW_UNREG_ID", "PROXY_CONTROL", "EXPORT_AMBE", "LOOSE", "RELAX_CHECKS", "ENHANCED_OBP", "BOTH_SLOTS", "SUB_MAP_LEARN", "TG4000_VOICE"):
+    for key in ("ENABLED", "REPEAT", "USE_ACL", "SINGLE_MODE", "VOICE_IDENT", "ALLOW_UNREG_ID", "PROXY_CONTROL", "EXPORT_AMBE", "LOOSE", "RELAX_CHECKS", "ENHANCED_OBP", "BOTH_SLOTS", "SUB_MAP_LEARN", "TG4000_VOICE", "TRUNKING"):
         if key in sys_cfg:
             _expect_bool(f"{prefix}.{key}", sys_cfg[key], errors)
     # OpenBridge always learns SUB_MAP: whoever is behind the link must stay reachable.
@@ -424,6 +424,56 @@ def _validate_system(name: str, sys_cfg: dict[str, Any], errors: list[str]) -> N
             _expect_number(f"{prefix}.{key}", sys_cfg[key], errors)
 
 
+def _validate_trunking(
+    systems: dict[str, Any],
+    proxy_cfg: dict[str, Any] | None,
+    proxy_port: int | None,
+    obp_port: int | None,
+    errors: list[str],
+) -> None:
+    """``TRUNKING: true``: a MASTER of DMR Tier III sites (DMRGateway TrunkingEnabled=1) on its own UDP port."""
+    target = proxy_cfg.get("TARGET_SYSTEM") if proxy_cfg else None
+    for name, sys_cfg in systems.items():
+        if not isinstance(sys_cfg, dict) or sys_cfg.get("TRUNKING") is not True:
+            continue
+        prefix = f"SYSTEMS.{name}"
+        if name == target:
+            errors.append(
+                f"{prefix}.TRUNKING: not supported on PROXY.TARGET_SYSTEM (the integrated proxy does not "
+                "carry DTC* logins or DMRT); give the trunking MASTER its own system and PORT."
+            )
+            continue
+        if sys_cfg.get("MODE") != "MASTER":
+            errors.append(f"{prefix}.TRUNKING: only on MASTER (Tier III sites log in like hotspots); remove it.")
+            continue
+        port = sys_cfg.get("PORT")
+        if isinstance(port, bool) or not isinstance(port, int) or port < 1:
+            errors.append(
+                f"{prefix}.PORT: required with TRUNKING (an integer > 0, e.g. 62037): "
+                "Tier III sites log in on the system's own UDP port."
+            )
+            port = None
+        generator = sys_cfg.get("GENERATOR")
+        if isinstance(generator, int) and not isinstance(generator, bool) and generator > 1:
+            errors.append(f"{prefix}.GENERATOR: must be 0 or 1 with TRUNKING (one port for every site; use MAX_PEERS).")
+        if sys_cfg.get("SINGLE_MODE") is True:
+            errors.append(
+                f"{prefix}.SINGLE_MODE: not supported with TRUNKING (a site's talkgroups are its "
+                "subscriptions); set it to false."
+            )
+        for key in ("TS1_STATIC", "TS2_STATIC"):
+            if not _is_empty(sys_cfg.get(key)):
+                errors.append(f"{prefix}.{key}: not supported with TRUNKING (sites subscribe their own talkgroups); leave it empty.")
+        reflector = sys_cfg.get("DEFAULT_REFLECTOR")
+        if isinstance(reflector, int) and not isinstance(reflector, bool) and reflector != 0:
+            errors.append(f"{prefix}.DEFAULT_REFLECTOR: not supported with TRUNKING; set it to 0.")
+        if port is None or not sys_cfg.get("ENABLED", True):
+            continue
+        for other, other_port in (("PROXY.LISTEN_PORT", proxy_port), ("OBP_PROXY.LISTEN_PORT", obp_port)):
+            if port == other_port:
+                errors.append(f"{prefix}.PORT: {port} is also {other}, would collide on bind.")
+
+
 def validate_config(config: dict[str, Any], *, config_path: str | None = None) -> None:
     """Validate config structure and scalar types. Raises ConfigError with all issues found."""
     errors: list[str] = []
@@ -454,6 +504,8 @@ def validate_config(config: dict[str, Any], *, config_path: str | None = None) -
     )
     if proxy_port is not None and proxy_port == obp_port:
         errors.append(f"PROXY.LISTEN_PORT and OBP_PROXY.LISTEN_PORT: both {proxy_port}, would collide on bind.")
+    if isinstance(systems, dict):
+        _validate_trunking(systems, proxy_cfg if isinstance(proxy_cfg, dict) else None, proxy_port, obp_port, errors)
     if _config_requires_database(config):
         _validate_database(config.get("DATABASE"), errors)
 

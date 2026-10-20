@@ -189,7 +189,10 @@ class HbpForwardMixin:
         if not src_proto:
             return True
         systems_cfg = self._config.get("SYSTEMS", {})
-        _slot_st = getattr(src_proto, "STATUS", {}).get(slot, {})
+        # A Tier III site: the stream's own row, so its new-stream checks run once per stream
+        # even while the site sends other calls with the same slot bit.
+        _trunk_rx = self._trunk_rx_row(system_name, stream_id)
+        _slot_st = _trunk_rx if _trunk_rx is not None else getattr(src_proto, "STATUS", {}).get(slot, {})
         _is_new_stream = stream_id != _slot_st.get("RX_STREAM_ID")
         if _is_new_stream:
             _slot_st.pop("_suppress_uplink", None)
@@ -323,6 +326,18 @@ class HbpForwardMixin:
                             _slot_st["LOOPLOG"] = True
                         _slot_st["LAST"] = pkt_time
                         return False
+                # Up from a Tier III site of that MASTER: the stream's own row, not a slot.
+                _rows = getattr(proto, "TRUNK_RX", None)
+                ss = _rows.get(stream_id) if isinstance(_rows, dict) and _rows else None
+                if isinstance(ss, dict) and stream_id == ss.get("RX_STREAM_ID"):
+                    if not _slot_st.get("LOOPLOG"):
+                        logger.debug(
+                            "(%s) HBP *LoopControl* FIRST Tier III site on %s, STREAM ID: %s, TG: %s, IGNORE THIS SOURCE",
+                            system_name, other_name, int_id(stream_id), int_id(dst_id),
+                        )
+                        _slot_st["LOOPLOG"] = True
+                    _slot_st["LAST"] = pkt_time
+                    return False
             else:
                 obp_st = ostatus.get(stream_id)
                 if (

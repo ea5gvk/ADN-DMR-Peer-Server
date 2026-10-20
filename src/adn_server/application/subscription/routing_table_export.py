@@ -83,7 +83,8 @@ def _legacy_to_type(sub: Subscription) -> str:
         return "NONE"
     if sub.role == SubscriptionRole.PASSIVE_STAT:
         return "STAT"
-    if sub.policy == ActivationPolicy.STATIC and sub.state.phase == SubscriptionPhase.ACTIVE:
+    # A Tier III (TRUNK) leg reads as static: rule timers never expire it and its table stays used.
+    if sub.policy in (ActivationPolicy.STATIC, ActivationPolicy.TRUNK) and sub.state.phase == SubscriptionPhase.ACTIVE:
         return "OFF"
     return "ON"
 

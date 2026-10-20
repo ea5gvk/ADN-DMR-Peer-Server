@@ -44,6 +44,9 @@ class ActivationPolicy(str, Enum):
     STATIC = "static"
     INBAND = "inband"
     OPENBRIDGE_STAT = "openbridge_stat"
+    # DMR Tier III: a trunking MASTER's leg held while one of its sites subscribes the TG
+    # (DMRT 0x03); no timer and no in-band trigger, released on the last 0x04 / disconnect.
+    TRUNK = "trunk"
 
 
 class SubscriptionPhase(str, Enum):

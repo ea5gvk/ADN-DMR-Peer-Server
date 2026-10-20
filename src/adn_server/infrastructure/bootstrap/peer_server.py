@@ -69,6 +69,7 @@ from adn_server.domain import bytes_4
 from adn_server.domain.dmr.bptc import encode_emblc
 from adn_server.domain.mesh_session import mesh_sessions
 from adn_server.infrastructure.acl_router import InMemoryAclRouter
+from adn_server.infrastructure.bootstrap.trunking import create_trunking_use_cases
 from adn_server.infrastructure.config_normalizer import (
     ensure_system_runtime_config as _ensure_system_runtime_config,
 )
@@ -497,6 +498,12 @@ def run_peer_server(
         dynamic_tg_store,
         on_restored=routing_use_cases.sync_restored_dynamic_tgs,
     )
+    # DMR Tier III (TRUNKING MASTERs): one registry per process, outside the config (survives SIGHUP).
+    # Routing keeps the sites' TRUNK legs (subscription port) and finds units at their site.
+    trunking_use_cases = create_trunking_use_cases(
+        config, protocols, acl_router.acl_check, subscription_port=routing_use_cases,
+    )
+    routing_use_cases.attach_trunking_registry(trunking_use_cases.registry)
     routing_table_for_report = routing_use_cases.routing_table_for_report
     report_factory.set_routing_table(routing_table_for_report())
     report_factory.set_systems(config.get("SYSTEMS", {}))
@@ -714,6 +721,7 @@ def run_peer_server(
             routing_table_for_report=routing_table_for_report,
             get_subscription_store=lambda: subscription_store,
             dynamic_tg_uc=dynamic_tg_uc,
+            trunking_uc=trunking_use_cases,
         )
 
     def _listen_system(_name: str, bind: BindSpec, protocol: Any) -> Any:
@@ -795,6 +803,11 @@ def run_peer_server(
         data_plugin_bridge.update_config(config)
         plugin_manager.rescan(config)
 
+    def _on_system_removed(system_name: str, protocol: Any) -> None:
+        # Also on a TRUNKING / MODE flip: its sites are gone with the old protocol.
+        routing_use_cases.flush_monitor_events_for_system(system_name, protocol)
+        trunking_use_cases.system_removed(system_name)
+
     def _do_config_reload() -> None:
         nonlocal report_mqtt, proxy_state, obp_proxy_state
         mqtt_before = mqtt_settings_from_config(config)
@@ -816,7 +829,7 @@ def run_peer_server(
             listen_udp=lambda n, b, p: _listen_system(n, b, p),
             stop_listener=_stop_udp_port,
             on_systems_changed=None,
-            on_system_removed=routing_use_cases.flush_monitor_events_for_system,
+            on_system_removed=_on_system_removed,
             should_bind_udp=_should_bind_udp,
             log=logger,
         ).addCallbacks(_on_reload_done, _on_reload_failed)

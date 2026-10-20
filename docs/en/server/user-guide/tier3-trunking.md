@@ -26,6 +26,22 @@ flowchart LR
 | Where a radio is (private calls) | Learned from traffic (`SUB_MAP`) | DMRT **registration**, then traffic |
 | Short data | DMR data frames | DMRT UDT and status messages between sites |
 
+## Quick install {#quick-install}
+
+`tools/install.sh` installs the server on Debian 12/13, Ubuntu 22.04+, Raspberry Pi OS bookworm or Armbian (amd64, arm64 and armhf; for example a VPS, a Raspberry Pi or an Odroid XU4). It does the following:
+
+- installs the packages, the `adn` user and a local MariaDB;
+- fetches the code into `/opt/adn-server` and creates its Python environment;
+- generates `adn-server.yaml` with the `TRUNK` MASTER enabled, and `adn-echo.yaml`;
+- creates the `adn-server` and `adn-echo` systemd services, and opens the ports when `ufw` or `firewalld` is active.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ea5gvk/ADN-DMR-Peer-Server/feat/dmr-tier3-trunking/tools/install.sh \
+  | sudo bash -s -- --server-id 2141
+```
+
+At the end it prints the passwords and the `DMRGateway.ini` block, and saves them in `/root/adn-server-install.txt`. Run again, it updates the code and dependencies and keeps the configuration and the database. Options: `--help`.
+
 ## Server configuration {#server-configuration}
 
 Add a MASTER of its own with its own UDP port. The commented `TRUNK:` block in `adn-server.example.yaml` is a ready template:

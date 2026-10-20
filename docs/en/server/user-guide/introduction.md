@@ -6,6 +6,7 @@ This service is a **DMR peer and bridge**. It implements:
 
 - **HBP** over UDP to **MASTER** and **PEER** systems (DMRD frames, authentication, pings).
 - **OpenBridge** over UDP to other networks — **DMRE v5** (embedded version 5, BLAKE2b, hops) is the **recommended** inter-server mode on ADN; **DMRD** v1 remains available for compatibility (see [OpenBridge](../protocols/openbridge.md#dmre-and-openbridge-v5)).
+- **DMR Tier III trunking** on a MASTER with `TRUNKING: true`: dmrtc sites behind DMRGateway `TrunkingEnabled=1` subscribe their talkgroups, register their radios and carry many calls at once (see [DMR Tier III trunking](tier3-trunking.md)).
 
 Configuration is **YAML** (`adn-server.yaml`), merged at runtime with optional voice settings (`adn-voice.yaml`). The shipped template is `adn-server.example.yaml`.
 
@@ -40,6 +41,7 @@ Routing, timers, OpenBridge loop control, and protocol handling are implemented 
 - [Special numbers](special-numbers.md) — TG 4000, information services, echo.
 - [Hotspot proxy](hotspot-proxy.md) — integrated **`PROXY`** / **`SELF_SERVICE`** in `adn-server.yaml`.
 - [OBP proxy](obp-proxy.md) — integrated **`OBP_PROXY`** OpenBridge fan-in.
+- [DMR Tier III trunking](tier3-trunking.md) — **`TRUNKING`** MASTER for dmrtc / DMRGateway sites.
 - [ADN Monitor](../../monitor/index.md) — dashboard, `adn-monitor.yaml`, self-service UI (separate repo, deployed with the server).
 - [Performance (2.x)](../development/performance.md) — CPU/RAM improvements in this release and what causes them.
 - [Credits & license](attribution.md) — ADN → FreeDMR → hblink3, license.

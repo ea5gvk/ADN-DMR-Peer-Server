@@ -124,6 +124,7 @@ Aparecen principalmente en **MASTER** (y a menudo en **PEER**). OpenBridge usa u
 | **DEFAULT_REFLECTOR** | Número de **reflector** por defecto para bridges de marcado `#` (0 = ninguno). |
 | **OVERRIDE_IDENT_TG** | TG opcional para ident por voz en lugar de all-call. |
 | **GENERATOR** | Si es **> 1**, este MASTER se expande en **`NAME-0`**, **`NAME-1`**, … con puertos consecutivos (ver `expand_generator` en código). El **`adn-proxy`** independiente legado usaba el mismo rango; el proxy **integrado** usa **`PROXY.TARGET_SYSTEM`** solo inyección (sin puertos UDP por hotspot en el servidor). |
+| **TRUNKING** | Por defecto `false`. Con `true`, este MASTER pasa a ser un sistema **DMR Tier III**. Solo acepta emplazamientos con DMRGateway `TrunkingEnabled=1` (dmrtc), que se conectan con los opcodes DTC*, se suscriben a sus propios talkgroups y registran sus radios. Necesita su propio `PORT` (el «DMRTC link» de Brandmeister usa el 62037). No puede ser `PROXY.TARGET_SYSTEM` ni llevar `SINGLE_MODE`, `TS1_STATIC` / `TS2_STATIC`, `DEFAULT_REFLECTOR` ni `GENERATOR` > 1. Activarlo o quitarlo en una recarga reinicia el sistema, y sus peers vuelven a conectarse. Ver [DMR Tier III trunking](tier3-trunking.md). |
 
 **MASTER** escucha conexiones PEER (salvo que sea el destino **solo inyección** del proxy — ver [Proxy hotspot](hotspot-proxy.md)); cada peer autenticado se guarda en **`PEERS`** en tiempo de ejecución.
 
@@ -323,3 +324,4 @@ Usa el intérprete del proyecto (ver reglas del workspace), p. ej. `python3.11` 
 - [Echo](echo.md) — ejemplo PEER (proceso echo).
 - [Proxy hotspot](hotspot-proxy.md) — **`PROXY`** / **`SELF_SERVICE`** integrados.
 - [Proxy OBP](obp-proxy.md) — fan-in OpenBridge **`OBP_PROXY`** integrado.
+- [DMR Tier III trunking](tier3-trunking.md) — MASTER **`TRUNKING`** para emplazamientos dmrtc / DMRGateway.

@@ -124,6 +124,7 @@ These appear mainly on **MASTER** (and often on **PEER**). OpenBridge uses a dif
 | **DEFAULT_REFLECTOR** | Default **reflector** number for `#` dial bridges (0 = none). |
 | **OVERRIDE_IDENT_TG** | Optional TG for voice ident instead of all-call. |
 | **GENERATOR** | If **> 1**, this MASTER is expanded into **`NAME-0`**, **`NAME-1`**, … with consecutive ports (see `expand_generator` in code). Legacy standalone **`adn-proxy`** used the same range; the **integrated** proxy instead uses **inject-only** **`PROXY.TARGET_SYSTEM`** (no per-hotspot UDP ports on the server). |
+| **TRUNKING** | Default `false`. `true` makes this MASTER a **DMR Tier III** system. It then accepts only DMRGateway `TrunkingEnabled=1` sites (dmrtc), which log in with the DTC* opcodes, subscribe their own talkgroups and register their radios. It needs its own `PORT` (Brandmeister's "DMRTC link" uses 62037). It cannot be `PROXY.TARGET_SYSTEM`, nor have `SINGLE_MODE`, `TS1_STATIC` / `TS2_STATIC`, `DEFAULT_REFLECTOR` or `GENERATOR` > 1. Setting or removing it on reload restarts the system, and its peers log in again. See [DMR Tier III trunking](tier3-trunking.md). |
 
 **MASTER** listens for PEER connections (unless it is the **inject-only** proxy target — see [Hotspot proxy](hotspot-proxy.md)); each authenticated peer is stored under **`PEERS`** at runtime.
 
@@ -323,3 +324,4 @@ Use the project interpreter (see workspace rules), e.g. `python3.11` from pyenv,
 - [Echo](echo.md) — PEER example (echo process).
 - [Hotspot proxy](hotspot-proxy.md) — integrated **`PROXY`** / **`SELF_SERVICE`**.
 - [OBP proxy](obp-proxy.md) — integrated **`OBP_PROXY`** OpenBridge fan-in.
+- [DMR Tier III trunking](tier3-trunking.md) — **`TRUNKING`** MASTER for dmrtc / DMRGateway sites.

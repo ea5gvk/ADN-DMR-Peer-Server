@@ -113,6 +113,8 @@ log "Sistema: ${PRETTY_NAME:-desconocido} ($ARCH)"
 # --- System packages ---------------------------------------------------------------
 log "Instalando paquetes del sistema"
 export DEBIAN_FRONTEND=noninteractive
+# needrestart (Ubuntu) would otherwise restart unrelated services after apt; only list them.
+export NEEDRESTART_MODE=l NEEDRESTART_SUSPEND=1
 PKGS=(git ca-certificates curl openssl python3 python3-venv python3-dev python3-pip
       build-essential pkg-config default-libmysqlclient-dev libffi-dev libssl-dev)
 [[ $WITH_FFMPEG -eq 1 ]] && PKGS+=(ffmpeg)

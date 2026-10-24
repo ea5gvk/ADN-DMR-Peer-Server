@@ -445,14 +445,18 @@ src, dst = sys.argv[1], sys.argv[2]
 env = os.environ
 lines = open(src, encoding="utf-8").read().splitlines()
 
-# Uncomment the TRUNK block (it ends at the first blank line).
-out, in_trunk = [], False
+# Uncomment the TRUNK block (it ends at the first blank line); the spaces after "#" on its
+# "TRUNK:" line are the comment's own, whatever the example's layout.
+out, in_trunk, cut = [], False, 0
 for line in lines:
-    if line.strip() == "# TRUNK:":
-        in_trunk = True
+    m = re.match(r"^(\s*)#(\s*)(.*)$", line)
+    if m and m.group(3) == "TRUNK:":
+        in_trunk, cut = True, len(m.group(2))
     if in_trunk and not line.strip():
         in_trunk = False
-    out.append(re.sub(r"^(\s*)# ", r"\1", line, count=1) if in_trunk else line)
+    if in_trunk and m:
+        line = m.group(1) + " " * (len(m.group(2)) - cut) + m.group(3)
+    out.append(line)
 
 passwords = {"SYSTEM": env["HOTSPOT_PASS"], "TRUNK": env["TRUNK_PASS"], "ECHO": env["ECHO_PASS"]}
 values = {
